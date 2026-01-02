@@ -23,13 +23,13 @@ OBS_WITH_FEATURES = 'features'
 
 # Observation shapes for each type
 # Width 25 = 24 board points + bar at index 24 (off remains scalar)
-# minimal: 12 board (6 my + 6 opp) + 24 dice + 2 off scalars + 1 contact + 2 legal_dice = 41
-# standard: minimal + 2 total_pips + 2 checkers_in_home + 2 deltas = 47
-# features: minimal + 2 pips_outside + 2 stragglers + 2 deltas = 47
+# minimal: 12 board (6 my + 6 opp) + 24 dice + 2 off scalars + 2 legal_dice = 40
+# standard: minimal + 1 contact + 2 total_pips + 2 checkers_in_home + 2 deltas = 47
+# features: standard + 2 pips_outside + 2 stragglers + 1 delta_stragglers = 52
 OBS_SHAPES = {
-    OBS_MINIMAL: (41, 1, 25),
+    OBS_MINIMAL: (40, 1, 25),
     OBS_STANDARD: (47, 1, 25),
-    OBS_WITH_FEATURES: (47, 1, 25),
+    OBS_WITH_FEATURES: (52, 1, 25),
 }
 
 
@@ -337,7 +337,7 @@ class BackgammonEnv(BaseEnv):
         """
         Minimal observation representation with separate planes for my/opponent checkers.
 
-        Shape: (41, 1, 25)
+        Shape: (40, 1, 25)
         Width 25 = 24 board points + bar at index 24 (off remains scalar)
 
         - Channels 0-5: My checker counts (>=1, >=2, ..., >=6 thresholds)
@@ -346,12 +346,11 @@ class BackgammonEnv(BaseEnv):
         - Channels 36-37: Scalar features broadcasted:
             - 36: My off / 15
             - 37: Opponent off / 15
-        - Channel 38: Contact indicator (1 if any opposing checkers in front of each other)
-        - Channels 39-40: Legal dice slot flags (aligned with action encoding):
-            - 39: Slot 0 playable (1 if any legal action uses slot 0)
-            - 40: Slot 1 playable (1 if any legal action uses slot 1)
+        - Channels 38-39: Legal dice slot flags (aligned with action encoding):
+            - 38: Slot 0 playable (1 if any legal action uses slot 0)
+            - 39: Slot 1 playable (1 if any legal action uses slot 1)
         """
-        obs = np.zeros((41, 1, 25), dtype=np.float32)
+        obs = np.zeros((40, 1, 25), dtype=np.float32)
 
         my_arr, opp_arr, my_bar, opp_bar, my_off, opp_off = self._get_relative_arrays()
 
@@ -393,17 +392,10 @@ class BackgammonEnv(BaseEnv):
         obs[36, :, :] = my_off / 15.0
         obs[37, :, :] = opp_off / 15.0
 
-        # D. Contact Indicator (Channel 38)
-        # Contact = any point where I have checkers AND opponent has checkers ahead of me
-        # In relative indexing: I move toward 0, opponent moves toward 23
-        # Contact exists if there's any point i where I have checkers and opponent has checkers at j < i
-        contact = self._compute_contact(my_arr, opp_arr, my_bar, opp_bar)
-        obs[38, :, :] = 1.0 if contact else 0.0
-
-        # E. Legal Dice Slot Flags (Channels 39-40)
+        # D. Legal Dice Slot Flags (Channels 38-39)
         # These tell the network which dice slots have playable moves
-        obs[39, :, :] = 1.0 if slot0_playable else 0.0
-        obs[40, :, :] = 1.0 if slot1_playable else 0.0
+        obs[38, :, :] = 1.0 if slot0_playable else 0.0
+        obs[39, :, :] = 1.0 if slot1_playable else 0.0
 
         return obs
 
@@ -451,7 +443,8 @@ class BackgammonEnv(BaseEnv):
         Shape: (47, 1, 25)
         Width 25 = 24 board points + bar at index 24 (off remains scalar)
 
-        - Channels 0-40: Same as minimal observation (including legal dice flags)
+        - Channels 0-39: Same as minimal observation (including legal dice flags)
+        - Channel 40: Contact indicator (1 if any opposing checkers in front of each other)
         - Channels 41-46: Race position features:
             - 41: My total pips / 200
             - 42: Opponent total pips / 200
@@ -501,13 +494,13 @@ class BackgammonEnv(BaseEnv):
         obs[36, :, :] = my_off / 15.0
         obs[37, :, :] = opp_off / 15.0
 
-        # D. Contact Indicator (Channel 38)
-        contact = self._compute_contact(my_arr, opp_arr, my_bar, opp_bar)
-        obs[38, :, :] = 1.0 if contact else 0.0
+        # D. Legal Dice Slot Flags (Channels 38-39)
+        obs[38, :, :] = 1.0 if slot0_playable else 0.0
+        obs[39, :, :] = 1.0 if slot1_playable else 0.0
 
-        # E. Legal Dice Slot Flags (Channels 39-40)
-        obs[39, :, :] = 1.0 if slot0_playable else 0.0
-        obs[40, :, :] = 1.0 if slot1_playable else 0.0
+        # E. Contact Indicator (Channel 40)
+        contact = self._compute_contact(my_arr, opp_arr, my_bar, opp_bar)
+        obs[40, :, :] = 1.0 if contact else 0.0
 
         # F. Race Position Features (Channels 41-46)
 
@@ -545,21 +538,26 @@ class BackgammonEnv(BaseEnv):
         """
         Full-featured observation representation with separate planes.
 
-        Shape: (47, 1, 25)
+        Shape: (52, 1, 25)
         Width 25 = 24 board points + bar at index 24 (off remains scalar)
 
-        - Channels 0-40: Same as minimal observation (including legal dice flags)
-        - Channels 41-46: Additional features (grouped by concept):
-            Race position:
-            - 41: My pips outside home / 100
-            - 42: Opponent pips outside home / 100
-            - 43: My stragglers / 15 (checkers outside home + bar; 0 = can bear off)
-            - 44: Opponent stragglers / 15
-            Delta features (clipped for stability):
-            - 45: Delta pip count (clipped to [-1, 1])
-            - 46: Delta stragglers (clipped to [-1, 1])
+        - Channels 0-39: Same as minimal observation (including legal dice flags)
+        - Channel 40: Contact indicator (1 if any opposing checkers in front of each other)
+        - Channels 41-46: Standard race features:
+            - 41: My total pips / 200
+            - 42: Opponent total pips / 200
+            - 43: My checkers in home / 15
+            - 44: Opponent checkers in home / 15
+            - 45: Delta pips (clipped to [-1, 1])
+            - 46: Delta checkers in home / 15 (clipped to [-1, 1])
+        - Channels 47-51: Feature-rich race features:
+            - 47: My pips outside home / 100
+            - 48: Opponent pips outside home / 100
+            - 49: My stragglers / 15 (checkers outside home + bar; 0 = can bear off)
+            - 50: Opponent stragglers / 15
+            - 51: Delta stragglers (clipped to [-1, 1])
         """
-        obs = np.zeros((47, 1, 25), dtype=np.float32)
+        obs = np.zeros((52, 1, 25), dtype=np.float32)
 
         my_arr, opp_arr, my_bar, opp_bar, my_off, opp_off = self._get_relative_arrays()
 
@@ -600,47 +598,65 @@ class BackgammonEnv(BaseEnv):
         obs[36, :, :] = my_off / 15.0
         obs[37, :, :] = opp_off / 15.0
 
-        # D. Contact Indicator (Channel 38)
+        # D. Legal Dice Slot Flags (Channels 38-39)
+        obs[38, :, :] = 1.0 if slot0_playable else 0.0
+        obs[39, :, :] = 1.0 if slot1_playable else 0.0
+
+        # E. Contact Indicator (Channel 40)
         contact = self._compute_contact(my_arr, opp_arr, my_bar, opp_bar)
-        obs[38, :, :] = 1.0 if contact else 0.0
+        obs[40, :, :] = 1.0 if contact else 0.0
 
-        # E. Legal Dice Slot Flags (Channels 39-40)
-        obs[39, :, :] = 1.0 if slot0_playable else 0.0
-        obs[40, :, :] = 1.0 if slot1_playable else 0.0
-
-        # F. Additional Features (Channels 41-46)
+        # F. Standard Race Features (Channels 41-46)
 
         # Pip weights for correct direction calculation
         pip_weights_me = np.arange(1, 25, dtype=np.int32)  # [1, 2, ..., 24]
         pip_weights_opp = np.arange(24, 0, -1, dtype=np.int32)  # [24, 23, ..., 1]
 
-        # 41: My pips outside home (indices 6-23 + bar)
-        my_pips_outside = np.dot(my_arr[6:24], pip_weights_me[6:24]) + my_bar * 25
-        obs[41, :, :] = my_pips_outside / 100.0
-
-        # 42: Opponent pips outside home (correct direction)
-        opp_pips_outside = np.dot(opp_arr[0:18], pip_weights_opp[0:18]) + opp_bar * 25
-        obs[42, :, :] = opp_pips_outside / 100.0
-
-        # 43: My stragglers (0 = can bear off)
-        my_stragglers = np.sum(my_arr[6:24]) + my_bar
-        obs[43, :, :] = my_stragglers / 15.0
-
-        # 44: Opponent stragglers
-        opp_stragglers = np.sum(opp_arr[0:18]) + opp_bar
-        obs[44, :, :] = opp_stragglers / 15.0
-
-        # 45: Delta pip count - clipped for training stability
-        # Positive delta = I'm behind (more pips to go)
+        # 41: My total pips (including bar)
         my_total_pips = np.dot(my_arr, pip_weights_me) + my_bar * 25
+        obs[41, :, :] = my_total_pips / 200.0
+
+        # 42: Opponent total pips (including bar)
         opp_total_pips = np.dot(opp_arr, pip_weights_opp) + opp_bar * 25
-        delta_pips = my_total_pips - opp_total_pips  # Range roughly -200 to +200
-        # Normalize to ~[-1, 1] and clip for stability
+        obs[42, :, :] = opp_total_pips / 200.0
+
+        # 43: My checkers in home (indices 0-5)
+        my_home_checkers = np.sum(my_arr[0:6])
+        obs[43, :, :] = my_home_checkers / 15.0
+
+        # 44: Opponent checkers in home (indices 18-23 from my perspective)
+        opp_home_checkers = np.sum(opp_arr[18:24])
+        obs[44, :, :] = opp_home_checkers / 15.0
+
+        # 45: Delta pips - clipped for training stability
+        delta_pips = my_total_pips - opp_total_pips
         obs[45, :, :] = np.clip(delta_pips / 200.0, -1.0, 1.0)
 
-        # 46: Delta stragglers - clipped for training stability
-        delta_stragglers = my_stragglers - opp_stragglers  # Range -15 to +15
-        obs[46, :, :] = np.clip(delta_stragglers / 15.0, -1.0, 1.0)
+        # 46: Delta checkers in home - clipped for training stability
+        delta_home = my_home_checkers - opp_home_checkers
+        obs[46, :, :] = np.clip(delta_home / 15.0, -1.0, 1.0)
+
+        # G. Feature-rich Race Features (Channels 47-51)
+
+        # 47: My pips outside home (indices 6-23 + bar)
+        my_pips_outside = np.dot(my_arr[6:24], pip_weights_me[6:24]) + my_bar * 25
+        obs[47, :, :] = my_pips_outside / 100.0
+
+        # 48: Opponent pips outside home (correct direction)
+        opp_pips_outside = np.dot(opp_arr[0:18], pip_weights_opp[0:18]) + opp_bar * 25
+        obs[48, :, :] = opp_pips_outside / 100.0
+
+        # 49: My stragglers (0 = can bear off)
+        my_stragglers = np.sum(my_arr[6:24]) + my_bar
+        obs[49, :, :] = my_stragglers / 15.0
+
+        # 50: Opponent stragglers
+        opp_stragglers = np.sum(opp_arr[0:18]) + opp_bar
+        obs[50, :, :] = opp_stragglers / 15.0
+
+        # 51: Delta stragglers - clipped for training stability
+        delta_stragglers = my_stragglers - opp_stragglers
+        obs[51, :, :] = np.clip(delta_stragglers / 15.0, -1.0, 1.0)
 
         return obs
 

@@ -9,7 +9,7 @@ backgammon_alphazero_config = dict(
     env=dict(
         env_id='backgammon',
         battle_mode='self_play_mode',
-        obs_type='standard',  # 'minimal' (41, 1, 25), 'standard' (47, 1, 25), or 'features' (47, 1, 25)
+        obs_type='features',  # 'minimal' (40, 1, 25), 'standard' (47, 1, 25), or 'features' (52, 1, 25)
         collector_env_num=8,
         evaluator_env_num=5,
         n_evaluator_episode=5,
@@ -17,14 +17,14 @@ backgammon_alphazero_config = dict(
     ),
     policy=dict(
         model=dict(
-            observation_shape=(47, 1, 25),  # Updated for features obs_type
+            observation_shape=(52, 1, 25),  # Updated for features obs_type
             action_space_size=50,  # 25 sources × 2 dice slots
-            image_channel=47,
+            image_channel=52,
             # Backgammon has 50 actions (source × die_slot encoding).
             # We can use a smaller categorical output.
             categorical_distribution=False,
             # Standard AlphaZero ResNet configuration adapted for smaller width
-            # (47, 1, 25) is small, so we don't need deep downsampling.
+            # (52, 1, 25) is small, so we don't need deep downsampling.
             downsample=dict(
                 is_downsample=False,
             ),

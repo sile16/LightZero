@@ -31,6 +31,12 @@ cdef class Move:
         else:
             return f"Dice(i={self.i}, j={self.j})"
 
+cdef struct UndoInfo:
+    signed char hit
+    signed char moved_from_bar
+    signed char moved_to_off
+    Py_ssize_t removed_die_index
+
 cdef class State:
     cdef signed char [:, ::1] board
     cdef signed char [::1] bar, beared_off
@@ -224,6 +230,58 @@ cdef class State:
 
     @cython.wraparound(False)
     @cython.boundscheck(False)
+    @cython.initializedcheck(False)
+    cdef void _do_move_fast(self, Move move, UndoInfo* undo):
+        """
+        Fast in-place move application for lookahead.
+        Assumes move is a movement move and does not update turn or legal_moves.
+        """
+        undo.hit = 0
+        undo.moved_from_bar = 1 if move.src in [-1, 24] else 0
+        undo.moved_to_off = 1 if move.dst in [-1, 24] else 0
+
+        if undo.moved_from_bar:
+            self.bar[self.turn] -= 1
+        else:
+            self.board[self.turn, move.src] -= 1
+
+        if undo.moved_to_off:
+            self.beared_off[self.turn] += 1
+        else:
+            if self.board[self._other_player(), move.dst] == 1:
+                undo.hit = 1
+                self.bar[self._other_player()] += 1
+                self.board[self._other_player(), move.dst] = 0
+            self.board[self.turn, move.dst] += 1
+
+        if move.n in self._piece_moves_left:
+            undo.removed_die_index = self._piece_moves_left.index(move.n)
+            del self._piece_moves_left[undo.removed_die_index]
+        else:
+            undo.removed_die_index = -1
+
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
+    @cython.initializedcheck(False)
+    cdef void _undo_move_fast(self, Move move, UndoInfo* undo):
+        if undo.removed_die_index != -1:
+            self._piece_moves_left.insert(undo.removed_die_index, move.n)
+
+        if undo.moved_to_off:
+            self.beared_off[self.turn] -= 1
+        else:
+            self.board[self.turn, move.dst] -= 1
+            if undo.hit:
+                self.board[self._other_player(), move.dst] = 1
+                self.bar[self._other_player()] -= 1
+
+        if undo.moved_from_bar:
+            self.bar[self.turn] += 1
+        else:
+            self.board[self.turn, move.src] += 1
+
+    @cython.wraparound(False)
+    @cython.boundscheck(False)
     @cython.nonecheck(False)
     cpdef int play_game_to_end(self):
         cdef int i, n_moves
@@ -231,7 +289,7 @@ cdef class State:
         while not self.game_ended():
             moves = self.get_moves()
             n_moves = len(moves)
-            i = int(rand() / RAND_MAX * n_moves)
+            i = rand() % n_moves
             self.do_move(moves[i])
         return self.get_winner()
 
@@ -245,7 +303,7 @@ cdef class State:
         while not self.game_ended() and ply < depth:
             moves = self.get_moves()
             n_moves = len(moves)
-            i = int(rand() / RAND_MAX * n_moves)
+            i = rand() % n_moves
             self.do_move(moves[i])
             ply += 1
         return self.get_winner()
@@ -429,18 +487,15 @@ cdef class State:
         # We need to find the max depth achievable from each candidate.
         cdef int max_depth = -1
         cdef list scored_moves = [] # tuples of (move, depth, first_die_val)
-        cdef State state_copy
         cdef int depth
         cdef Move move
+        cdef UndoInfo undo
         
         for move in candidates:
             # We must verify if this move is just the START of a valid sequence.
-            # Copy state
-            state_copy = self.__copy__()
-            state_copy.do_move(move) # This consumes the die in the copy
-            
-            # Recursively find max moves from this new state
-            depth = 1 + state_copy._get_max_depth_recursive()
+            self._do_move_fast(move, &undo)
+            depth = 1 + self._get_max_depth_recursive()
+            self._undo_move_fast(move, &undo)
             
             scored_moves.append((move, depth, move.n))
             
@@ -486,13 +541,13 @@ cdef class State:
             
         cdef int max_d = 0
         cdef int d
-        cdef State state_copy
         cdef Move m
+        cdef UndoInfo undo
         
         for m in moves:
-            state_copy = self.__copy__()
-            state_copy.do_move(m)
-            d = 1 + state_copy._get_max_depth_recursive()
+            self._do_move_fast(m, &undo)
+            d = 1 + self._get_max_depth_recursive()
+            self._undo_move_fast(m, &undo)
             if d > max_d:
                 max_d = d
                 

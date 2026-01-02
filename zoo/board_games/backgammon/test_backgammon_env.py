@@ -720,11 +720,11 @@ class TestBackgammonEnvObservation:
     # ==================== Observation Shape Tests ====================
 
     def test_minimal_observation_shape(self):
-        """Test minimal observation has correct shape (41, 1, 25)."""
+        """Test minimal observation has correct shape (40, 1, 25)."""
         cfg = EasyDict(dict(battle_mode='self_play_mode', obs_type=OBS_MINIMAL))
         env = BackgammonEnv(cfg)
         obs = env.reset()
-        assert obs['observation'].shape == (41, 1, 25)
+        assert obs['observation'].shape == (40, 1, 25)
 
     def test_standard_observation_shape(self):
         """Test standard observation has correct shape (47, 1, 25)."""
@@ -734,11 +734,11 @@ class TestBackgammonEnvObservation:
         assert obs['observation'].shape == (47, 1, 25)
 
     def test_features_observation_shape(self):
-        """Test features observation has correct shape (47, 1, 25)."""
+        """Test features observation has correct shape (52, 1, 25)."""
         cfg = EasyDict(dict(battle_mode='self_play_mode', obs_type=OBS_WITH_FEATURES))
         env = BackgammonEnv(cfg)
         obs = env.reset()
-        assert obs['observation'].shape == (47, 1, 25)
+        assert obs['observation'].shape == (52, 1, 25)
 
     # ==================== Separate Planes Board Encoding Tests ====================
 
@@ -921,17 +921,17 @@ class TestBackgammonEnvObservation:
 
     def test_contact_indicator_initial_position(self):
         """Test contact indicator is 1 at game start (pieces intermingled)."""
-        cfg = EasyDict(dict(battle_mode='self_play_mode', obs_type=OBS_MINIMAL))
+        cfg = EasyDict(dict(battle_mode='self_play_mode', obs_type=OBS_STANDARD))
         env = BackgammonEnv(cfg)
         env.reset()
 
-        obs = env._get_obs_minimal()
-        # Channel 38: contact indicator - should be 1 at start
-        assert obs[38, 0, 0] == 1.0
+        obs = env._get_obs_standard()
+        # Channel 40: contact indicator - should be 1 at start
+        assert obs[40, 0, 0] == 1.0
 
     def test_contact_indicator_race_position(self):
         """Test contact indicator is 0 when pure race (pieces passed)."""
-        cfg = EasyDict(dict(battle_mode='self_play_mode', obs_type=OBS_MINIMAL))
+        cfg = EasyDict(dict(battle_mode='self_play_mode', obs_type=OBS_STANDARD))
         env = BackgammonEnv(cfg)
         env.reset()
 
@@ -943,13 +943,13 @@ class TestBackgammonEnvObservation:
         env.game.set_turn(0)
         env._current_player = 0
 
-        obs = env._get_obs_minimal()
-        # Channel 38: contact indicator - should be 0 (pure race)
-        assert obs[38, 0, 0] == 0.0
+        obs = env._get_obs_standard()
+        # Channel 40: contact indicator - should be 0 (pure race)
+        assert obs[40, 0, 0] == 0.0
 
     def test_contact_indicator_bar_means_contact(self):
         """Test contact indicator is 1 when any player has bar checkers."""
-        cfg = EasyDict(dict(battle_mode='self_play_mode', obs_type=OBS_MINIMAL))
+        cfg = EasyDict(dict(battle_mode='self_play_mode', obs_type=OBS_STANDARD))
         env = BackgammonEnv(cfg)
         env.reset()
 
@@ -962,9 +962,9 @@ class TestBackgammonEnvObservation:
         env.game.set_turn(0)
         env._current_player = 0
 
-        obs = env._get_obs_minimal()
-        # Channel 38: contact indicator - should be 1 (bar means contact)
-        assert obs[38, 0, 0] == 1.0
+        obs = env._get_obs_standard()
+        # Channel 40: contact indicator - should be 1 (bar means contact)
+        assert obs[40, 0, 0] == 1.0
 
     # ==================== Legal Dice Slot Flags Tests ====================
 
@@ -983,9 +983,9 @@ class TestBackgammonEnvObservation:
         slot0_has_action = any(action_mask[i] == 1 for i in range(0, 50, 2))
         slot1_has_action = any(action_mask[i] == 1 for i in range(1, 50, 2))
 
-        # Channel 39: slot 0 playable, Channel 40: slot 1 playable
-        assert obs_vector[39, 0, 0] == (1.0 if slot0_has_action else 0.0)
-        assert obs_vector[40, 0, 0] == (1.0 if slot1_has_action else 0.0)
+        # Channel 38: slot 0 playable, Channel 39: slot 1 playable
+        assert obs_vector[38, 0, 0] == (1.0 if slot0_has_action else 0.0)
+        assert obs_vector[39, 0, 0] == (1.0 if slot1_has_action else 0.0)
 
     def test_legal_dice_doubles_both_playable(self):
         """Test both dice slots are marked playable for doubles."""
@@ -998,10 +998,10 @@ class TestBackgammonEnvObservation:
         obs_vector = obs['observation']
 
         # For doubles, both slots map to same die value, so both should be playable
-        # Channel 39: slot 0 playable, Channel 40: slot 1 playable
+        # Channel 38: slot 0 playable, Channel 39: slot 1 playable
         # At game start with doubles, we should have legal moves
+        assert obs_vector[38, 0, 0] == 1.0
         assert obs_vector[39, 0, 0] == 1.0
-        assert obs_vector[40, 0, 0] == 1.0
 
     def test_legal_dice_one_slot_blocked(self):
         """Test only one slot is playable when moves for one die are blocked."""
@@ -1029,8 +1029,8 @@ class TestBackgammonEnvObservation:
         slot1_has_action = any(action_mask[i] == 1 for i in range(1, 50, 2))
 
         # Observation should match action mask
-        assert obs_vector[39, 0, 0] == (1.0 if slot0_has_action else 0.0)
-        assert obs_vector[40, 0, 0] == (1.0 if slot1_has_action else 0.0)
+        assert obs_vector[38, 0, 0] == (1.0 if slot0_has_action else 0.0)
+        assert obs_vector[39, 0, 0] == (1.0 if slot1_has_action else 0.0)
 
     def test_legal_dice_matches_action_mask(self):
         """Test legal dice flags always match action mask content."""
@@ -1050,10 +1050,10 @@ class TestBackgammonEnvObservation:
             slot1_expected = any(action_mask[i] == 1 for i in range(1, 50, 2))
 
             # Verify channels match
-            assert obs_vector[39, 0, 0] == (1.0 if slot0_expected else 0.0), \
-                f"Slot 0 playable mismatch: obs={obs_vector[39, 0, 0]}, expected={slot0_expected}"
-            assert obs_vector[40, 0, 0] == (1.0 if slot1_expected else 0.0), \
-                f"Slot 1 playable mismatch: obs={obs_vector[40, 0, 0]}, expected={slot1_expected}"
+            assert obs_vector[38, 0, 0] == (1.0 if slot0_expected else 0.0), \
+                f"Slot 0 playable mismatch: obs={obs_vector[38, 0, 0]}, expected={slot0_expected}"
+            assert obs_vector[39, 0, 0] == (1.0 if slot1_expected else 0.0), \
+                f"Slot 1 playable mismatch: obs={obs_vector[39, 0, 0]}, expected={slot1_expected}"
 
             # Take random action
             legal_actions = [i for i, x in enumerate(action_mask) if x == 1]
@@ -1076,12 +1076,12 @@ class TestBackgammonEnvObservation:
         obs_vector = obs['observation']
         action_mask = obs['action_mask']
 
-        # Verify channels 39-40 in features observation
+        # Verify channels 38-39 in features observation
         slot0_expected = any(action_mask[i] == 1 for i in range(0, 50, 2))
         slot1_expected = any(action_mask[i] == 1 for i in range(1, 50, 2))
 
-        assert obs_vector[39, 0, 0] == (1.0 if slot0_expected else 0.0)
-        assert obs_vector[40, 0, 0] == (1.0 if slot1_expected else 0.0)
+        assert obs_vector[38, 0, 0] == (1.0 if slot0_expected else 0.0)
+        assert obs_vector[39, 0, 0] == (1.0 if slot1_expected else 0.0)
 
     # ==================== Standard Mode Tests ====================
 
@@ -1175,12 +1175,12 @@ class TestBackgammonEnvObservation:
         obs_vector = obs['observation']
         action_mask = obs['action_mask']
 
-        # Verify channels 39-40 in standard observation
+        # Verify channels 38-39 in standard observation
         slot0_expected = any(action_mask[i] == 1 for i in range(0, 50, 2))
         slot1_expected = any(action_mask[i] == 1 for i in range(1, 50, 2))
 
-        assert obs_vector[39, 0, 0] == (1.0 if slot0_expected else 0.0)
-        assert obs_vector[40, 0, 0] == (1.0 if slot1_expected else 0.0)
+        assert obs_vector[38, 0, 0] == (1.0 if slot0_expected else 0.0)
+        assert obs_vector[39, 0, 0] == (1.0 if slot1_expected else 0.0)
 
     # ==================== Features Mode Tests ====================
 
@@ -1199,8 +1199,8 @@ class TestBackgammonEnvObservation:
         env._current_player = 0
 
         obs = env._get_obs_with_features()
-        # Channel 43: my stragglers / 15 should be 0
-        assert obs[43, 0, 0] == 0.0
+        # Channel 49: my stragglers / 15 should be 0
+        assert obs[49, 0, 0] == 0.0
 
     def test_stragglers_nonzero_outside_home(self):
         """Test stragglers > 0 when pieces outside home."""
@@ -1216,8 +1216,8 @@ class TestBackgammonEnvObservation:
         env._current_player = 0
 
         obs = env._get_obs_with_features()
-        # Channel 43: my stragglers / 15 = 5/15
-        assert abs(obs[43, 0, 0] - 5/15) < 0.01
+        # Channel 49: my stragglers / 15 = 5/15
+        assert abs(obs[49, 0, 0] - 5/15) < 0.01
 
     def test_delta_pip_count_even(self):
         """Test delta pip count is 0 when equal (clipped format)."""
@@ -1274,8 +1274,8 @@ class TestBackgammonEnvObservation:
         obs = env._get_obs_with_features()
         # delta_pips = 360 - 15 = 345, normalized = 345/200 = 1.725, clipped to 1.0
         assert obs[45, 0, 0] == 1.0
-        # Channel 46: delta stragglers also clipped
-        assert -1.0 <= obs[46, 0, 0] <= 1.0
+        # Channel 51: delta stragglers also clipped
+        assert -1.0 <= obs[51, 0, 0] <= 1.0
 
     # ==================== Player Perspective Tests ====================
 
