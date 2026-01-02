@@ -1167,6 +1167,9 @@ xst/
 _ngo/
 _xmsgs/
 
+# Cython annotation outputs
+zoo/board_games/backgammon/cython_backgammon/*.html
+
 ### TortoiseGit template
 # Project-level settings
 /.tgitconfig
