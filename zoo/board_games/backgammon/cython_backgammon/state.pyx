@@ -75,32 +75,21 @@ cdef class State:
     @cython.initializedcheck(False)
     def __copy__(self):
         cdef State state
-        cdef Move move 
-        cdef signed char x
-        cdef int i, j
-        state = State()
-        # Fast manual copy of arrays
+        state = State.__new__(State)
+
         state.board = np.copy(self.board)
         state.bar = np.copy(self.bar)
         state.beared_off = np.copy(self.beared_off)
-        
+
         state.turn = self.turn
         state.turn_number = self.turn_number
         state.winner = self.winner
         state._is_nature_turn = self._is_nature_turn
         state.game_has_started = self.game_has_started
-        
-        # Deep copy moves lists
-        if self.legal_moves is not None:
-             if len(self.legal_moves) > 0 and isinstance(self.legal_moves[0], Move):
-                 if (<Move>self.legal_moves[0]).is_movement_move:
-                     state.legal_moves = [self._new_movement_move(move.src, move.dst, move.n) for move in self.legal_moves]
-                 else:
-                     state.legal_moves = self.get_roll_2d6_moves() # Dice moves are generic
-             else:
-                 state.legal_moves = []
-        
-        state._piece_moves_left = [x for x in self._piece_moves_left]
+
+        state._piece_moves_left = self._piece_moves_left[:]
+        state.legal_moves = []
+        state._array_template = array.array('i', [])
         return state
 
     cdef Move _new_movement_move(self, signed char src, signed char dst, signed char n):

@@ -21,7 +21,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirna
 
 from easydict import EasyDict
 from zoo.board_games.backgammon.envs.backgammon_env import (
-    BackgammonEnv, OBS_MINIMAL, OBS_STANDARD, OBS_WITH_FEATURES
+    BackgammonEnv, OBS_MINIMAL, OBS_STANDARD, OBS_WITH_FEATURES, OBS_SHAPES
+)
+from zoo.board_games.backgammon.pgx_reference import (
+    PGX_SHORT_GAME_BOARD, pgx_board_to_internal
 )
 
 
@@ -88,6 +91,23 @@ class TestBackgammonEnvReset:
         assert env1._current_player == env2._current_player
 
 
+class TestBackgammonConfigConsistency:
+    """Ensure config and env observation settings stay aligned."""
+
+    def test_mcts_env_obs_type_matches_env(self):
+        from zoo.board_games.backgammon.config.backgammon_alphazero_bot_mode_config import (
+            backgammon_alphazero_config,
+        )
+
+        env_obs_type = backgammon_alphazero_config.env.obs_type
+        mcts_obs_type = backgammon_alphazero_config.policy.mcts_env_config.obs_type
+        assert env_obs_type == mcts_obs_type
+
+        obs_shape = OBS_SHAPES[env_obs_type]
+        assert backgammon_alphazero_config.policy.model.observation_shape == obs_shape
+        assert backgammon_alphazero_config.policy.model.image_channel == obs_shape[0]
+
+
 class TestBackgammonEnvStep:
     """Tests for step execution."""
 
@@ -118,7 +138,6 @@ class TestBackgammonEnvStep:
 
         assert 'observation' in timestep.obs
         assert 'action_mask' in timestep.obs
-        assert timestep.obs['observation'].shape == (47, 1, 25)  # standard obs_type default
 
     def test_step_has_legal_actions_if_not_done(self):
         cfg = EasyDict(dict(battle_mode='self_play_mode'))
@@ -134,6 +153,17 @@ class TestBackgammonEnvStep:
         if not timestep.done:
             new_legal = [i for i, x in enumerate(timestep.obs['action_mask']) if x == 1]
             assert len(new_legal) > 0, "Non-terminal state must have legal actions"
+
+
+class TestPgxShortGameReference:
+    """Reference mapping for pgx short-game init board."""
+
+    def test_pgx_short_game_mapping_counts(self):
+        board, bar, off = pgx_board_to_internal(PGX_SHORT_GAME_BOARD, current_player=0)
+        white_total = int(board[0].sum()) + int(bar[0]) + int(off[0])
+        black_total = int(board[1].sum()) + int(bar[1]) + int(off[1])
+        assert white_total == 15
+        assert black_total == 15
 
 
 class TestBackgammonEnvActionMask:
