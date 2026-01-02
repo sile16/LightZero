@@ -8,6 +8,7 @@ This rolls dice (allowing doubles) and advances to movement state.
 """
 import sys
 import os
+import copy
 import pytest
 import numpy as np
 
@@ -85,6 +86,29 @@ class TestCythonEngineDiceRoll:
                 assert remaining[0] == remaining[1] == remaining[2] == remaining[3]
                 break
         # Note: not asserting doubles_found since it's probabilistic
+
+
+class TestCythonEngineCopy:
+    """Test copy behavior for MCTS compatibility."""
+
+    def test_copy_preserves_legal_moves_in_nature_turn(self):
+        s = state.State()
+        legal_moves = s.get_moves()
+        assert len(legal_moves) > 0
+
+        s_copy = copy.copy(s)
+        legal_moves_copy = s_copy.get_moves()
+        assert len(legal_moves_copy) == len(legal_moves)
+
+    def test_copy_preserves_legal_moves_in_movement_turn(self):
+        s = state.State()
+        s.force_start(0)
+        legal_moves = s.get_moves()
+        assert len(legal_moves) > 0
+
+        s_copy = copy.copy(s)
+        legal_moves_copy = s_copy.get_moves()
+        assert len(legal_moves_copy) == len(legal_moves)
 
 
 class TestCythonEngineCheckerMoves:

@@ -88,7 +88,7 @@ cdef class State:
         state.game_has_started = self.game_has_started
 
         state._piece_moves_left = self._piece_moves_left[:]
-        state.legal_moves = []
+        state.legal_moves = list(self.legal_moves)
         state._array_template = array.array('i', [])
         return state
 
