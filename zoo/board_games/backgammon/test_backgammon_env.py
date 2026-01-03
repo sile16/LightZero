@@ -79,7 +79,7 @@ class TestBackgammonEnvReset:
         assert obs['observation'].shape == (47, 1, 25)  # standard obs_type default
         assert obs['action_mask'].shape == (50,)
         assert obs['to_play'] in [1, 2]
-        assert 0 <= obs['chance'] <= 20
+        assert 0 <= obs['chance'] <= 21
 
     def test_reset_deterministic_with_seed(self):
         cfg = EasyDict(dict(battle_mode='self_play_mode'))
@@ -120,7 +120,7 @@ class TestBackgammonConfigConsistency:
         obs_shape = OBS_SHAPES[env_obs_type]
         assert backgammon_stochastic_muzero_config.policy.model.observation_shape == obs_shape
         assert backgammon_stochastic_muzero_config.policy.model.image_channel == obs_shape[0]
-        assert backgammon_stochastic_muzero_config.policy.model.chance_space_size == 21
+        assert backgammon_stochastic_muzero_config.policy.model.chance_space_size == 22
 
 
 class TestBackgammonEnvChance:
@@ -176,7 +176,7 @@ class TestBackgammonEnvStep:
         assert 'observation' in timestep.obs
         assert 'action_mask' in timestep.obs
         assert 'chance' in timestep.obs
-        assert 0 <= timestep.obs['chance'] <= 20
+        assert 0 <= timestep.obs['chance'] <= 21
 
     def test_step_has_legal_actions_if_not_done(self):
         cfg = EasyDict(dict(battle_mode='self_play_mode'))

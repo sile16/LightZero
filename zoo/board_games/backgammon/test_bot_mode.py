@@ -39,7 +39,7 @@ class TestBotModeInit:
         obs = env.reset()
         assert env._current_player == 0, "Agent should be player 0"
         assert obs['to_play'] == -1
-        assert 0 <= obs['chance'] <= 20
+        assert 0 <= obs['chance'] <= 21
 
 
 class TestBotModeGameplay:

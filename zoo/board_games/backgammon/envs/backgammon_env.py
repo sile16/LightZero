@@ -38,6 +38,7 @@ OBS_SHAPES = {
 # Chance outcomes: unordered dice pairs mapped to [0, 20].
 _CHANCE_OUTCOMES = [(i, j) for i in range(1, 7) for j in range(i, 7)]
 _CHANCE_MAP = {pair: idx for idx, pair in enumerate(_CHANCE_OUTCOMES)}
+_CHANCE_NO_ROLL = len(_CHANCE_OUTCOMES)
 
 
 @ENV_REGISTRY.register('backgammon')
@@ -70,7 +71,8 @@ class BackgammonEnv(BaseEnv):
         self.obs_type = getattr(self.cfg, 'obs_type', OBS_STANDARD)
         self.reward_scale = float(getattr(self.cfg, 'reward_scale', 3.0))
         self._rng = random.Random()
-        self.chance_space_size = 21
+        # 21 dice outcomes + 1 "no roll" outcome for deterministic transitions.
+        self.chance_space_size = 22
         self._turn_dice = None
 
         # Initialize Bot if needed
@@ -174,6 +176,8 @@ class BackgammonEnv(BaseEnv):
         # Map Action Index -> Move Object
         # Action = Source * 2 + die_slot
         # Action range: 0-49
+        # Clear chance; only set if a new roll happens in this transition.
+        self._turn_dice = None
 
         # Track who made this move for reward calculation
         acting_player = self._current_player
@@ -182,8 +186,9 @@ class BackgammonEnv(BaseEnv):
         if len(legal_moves) == 0:
             self.game.advance_turn_if_no_moves()
             if not self.game.game_ended():
-                self.game.auto_roll()
-                self._update_turn_dice_from_remaining()
+                if self.game.is_nature_turn():
+                    self.game.auto_roll()
+                    self._update_turn_dice_from_remaining()
             done = self.game.game_ended()
             winner = self.game.get_winner()
             reward = 0
@@ -209,8 +214,9 @@ class BackgammonEnv(BaseEnv):
             else:
                 self.game.advance_turn_if_no_moves()
                 if not self.game.game_ended():
-                    self.game.auto_roll()
-                    self._update_turn_dice_from_remaining()
+                    if self.game.is_nature_turn():
+                        self.game.auto_roll()
+                        self._update_turn_dice_from_remaining()
             done = self.game.game_ended()
             winner = self.game.get_winner()
             reward = 0
@@ -258,8 +264,9 @@ class BackgammonEnv(BaseEnv):
 
             # After move, auto-roll if turn switched to nature turn
             if not self.game.game_ended():
-                self.game.auto_roll()
-                self._update_turn_dice_from_remaining()
+                if self.game.is_nature_turn():
+                    self.game.auto_roll()
+                    self._update_turn_dice_from_remaining()
 
         # Check for game end
         done = self.game.game_ended()
@@ -418,7 +425,7 @@ class BackgammonEnv(BaseEnv):
 
     def _get_chance_value(self, dice_values):
         if not dice_values:
-            return -1
+            return _CHANCE_NO_ROLL
         die1, die2 = dice_values
         ordered = (die1, die2) if die1 <= die2 else (die2, die1)
         return _CHANCE_MAP[ordered]
