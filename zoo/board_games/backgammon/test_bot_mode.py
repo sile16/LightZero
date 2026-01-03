@@ -37,7 +37,7 @@ class TestBotModeInit:
         env = BackgammonEnv(cfg)
         obs = env.reset()
         assert env._current_player == 0, "Agent should be player 0"
-        assert obs['to_play'] == 0
+        assert obs['to_play'] == -1
 
 
 class TestBotModeGameplay:
@@ -83,7 +83,7 @@ class TestBotModeGameplay:
             # Turn should be back to agent (player 0)
             assert env._current_player == 0, \
                 f"Expected turn to return to agent (0), got {env._current_player}"
-            assert timestep.obs['to_play'] == 0
+            assert timestep.obs['to_play'] == -1
 
 
 class TestBotActionLegality:

@@ -442,6 +442,22 @@ class TestSingleDieOnly:
         used_slots = {decode_action(a)[1] for a in legal_actions}
         assert used_slots == {1}
 
+    def test_single_remaining_die_uses_slot0_only(self):
+        """When only one die remains, only slot 0 should be used."""
+        cfg = EasyDict(dict(battle_mode='self_play_mode'))
+        env = BackgammonEnv(cfg)
+        env.reset()
+
+        env.set_dice([3])
+        slot0_die, slot1_die = env._get_dice_slots()
+        assert slot0_die == 3 and slot1_die == 0
+
+        obs = env.observe()
+        legal_actions = [i for i, x in enumerate(obs['action_mask']) if x == 1]
+        assert len(legal_actions) > 0
+        used_slots = {decode_action(a)[1] for a in legal_actions}
+        assert used_slots == {0}
+
 
 class TestDoubles:
     """Test doubles handling in the action mask."""

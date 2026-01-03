@@ -76,6 +76,7 @@ class TestBackgammonEnvReset:
         assert 'to_play' in obs
         assert obs['observation'].shape == (47, 1, 25)  # standard obs_type default
         assert obs['action_mask'].shape == (50,)
+        assert obs['to_play'] in [1, 2]
 
     def test_reset_deterministic_with_seed(self):
         cfg = EasyDict(dict(battle_mode='self_play_mode'))
@@ -500,10 +501,14 @@ class TestBackgammonEnvMultiMoveTurns:
             if len(legal_actions) == 0:
                 break
 
-            # Verify both die slots are valid (doubles)
+            # Verify dice slots for doubles; when one die remains, slot1 is 0
             slot0_die, slot1_die = env._get_dice_slots()
-            assert slot0_die == slot1_die == 3, \
-                f"Doubles should have same value in both slots, got {slot0_die}, {slot1_die}"
+            if len(remaining) > 1:
+                assert slot0_die == slot1_die == 3, \
+                    f"Doubles should have same value in both slots, got {slot0_die}, {slot1_die}"
+            else:
+                assert slot0_die == 3 and slot1_die == 0, \
+                    f"Single remaining die should use slot0 only, got {slot0_die}, {slot1_die}"
 
             env._step_core(legal_actions[0])
             moves_made += 1

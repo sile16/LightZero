@@ -204,7 +204,8 @@ class BackgammonEnv(BaseEnv):
 
         self._current_player = self.game.get_player_turn()
 
-        return BaseEnvTimestep(self.observe(), reward, done, {'action_mask': self.legal_actions})
+        obs = self.observe()
+        return BaseEnvTimestep(obs, reward, done, {'action_mask': obs['action_mask']})
 
     def _get_win_value(self, winner):
         """
@@ -235,10 +236,13 @@ class BackgammonEnv(BaseEnv):
         Get unique dice values mapped to slots, sorted high to low.
         Returns (slot0_value, slot1_value) where slot0 >= slot1.
         For doubles, both slots have the same value.
+        If only one die remains, slot1 is 0 to avoid duplicate actions.
         """
         remaining = self.game.get_remaining_dice()
         if len(remaining) == 0:
             return (0, 0)
+        if len(remaining) == 1:
+            return (remaining[0], 0)
         unique = sorted(set(remaining), reverse=True)  # Higher die first
         if len(unique) == 1:
             return (unique[0], unique[0])
@@ -330,7 +334,7 @@ class BackgammonEnv(BaseEnv):
         return {
             'observation': obs_vector,
             'action_mask': mask,
-            'to_play': self._current_player
+            'to_play': (self._current_player + 1) if self.battle_mode == 'self_play_mode' else -1
         }
 
     def _get_obs_minimal(self, slot0_playable=False, slot1_playable=False):
