@@ -123,7 +123,7 @@ class TestBackgammonEnvStep:
 
         timestep = env.step(action)
 
-        assert timestep.reward in [-1, 0, 1]
+        assert timestep.reward in [-1, -2 / 3, -1 / 3, 0, 1 / 3, 2 / 3, 1]
         assert isinstance(timestep.done, bool)
 
     def test_step_returns_valid_observation(self):
@@ -360,13 +360,15 @@ class TestBackgammonEnvGameCompletion:
             obs = timestep.obs
 
         winner = env.game.get_winner()
-        # With gammon/backgammon scoring, reward can be 1, 2, or 3 (or negative)
+        # With reward scaling, reward can be 1/3, 2/3, or 1 (or negative)
         if winner == last_player:
             assert timestep.reward > 0, f"Winner should get positive reward, got {timestep.reward}"
-            assert timestep.reward in [1, 2, 3], f"Reward should be 1, 2, or 3, got {timestep.reward}"
+            assert timestep.reward in [1 / 3, 2 / 3, 1], \
+                f"Reward should be 1/3, 2/3, or 1, got {timestep.reward}"
         else:
             assert timestep.reward < 0, f"Loser should get negative reward, got {timestep.reward}"
-            assert timestep.reward in [-1, -2, -3], f"Reward should be -1, -2, or -3, got {timestep.reward}"
+            assert timestep.reward in [-1 / 3, -2 / 3, -1], \
+                f"Reward should be -1/3, -2/3, or -1, got {timestep.reward}"
 
 
 class TestBackgammonEnvMultiMoveTurns:
@@ -1365,7 +1367,7 @@ class TestBackgammonEnvTerminalRewards:
         timestep = env._step_core(0)
 
         assert timestep.done
-        assert timestep.reward == 1
+        assert timestep.reward == pytest.approx(1 / 3)
 
     def test_gammon_reward_is_two(self):
         cfg = EasyDict(dict(battle_mode='self_play_mode'))
@@ -1376,7 +1378,7 @@ class TestBackgammonEnvTerminalRewards:
         timestep = env._step_core(0)
 
         assert timestep.done
-        assert timestep.reward == 2
+        assert timestep.reward == pytest.approx(2 / 3)
 
     def test_backgammon_reward_is_three(self):
         cfg = EasyDict(dict(battle_mode='self_play_mode'))
@@ -1387,7 +1389,7 @@ class TestBackgammonEnvTerminalRewards:
         timestep = env._step_core(0)
 
         assert timestep.done
-        assert timestep.reward == 3
+        assert timestep.reward == pytest.approx(1.0)
 
     def test_backgammon_loser_in_winner_home(self):
         """Backgammon when loser has pieces in winner's home board."""
@@ -1400,7 +1402,7 @@ class TestBackgammonEnvTerminalRewards:
         timestep = env._step_core(0)
 
         assert timestep.done
-        assert timestep.reward == 3
+        assert timestep.reward == pytest.approx(1.0)
 
 
 if __name__ == '__main__':

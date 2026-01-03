@@ -160,6 +160,13 @@ cdef class State:
     cpdef void set_turn(self, int player):
         self.turn = player
 
+    cpdef void seed(self, unsigned int seed):
+        srand(seed)
+
+    cpdef void advance_turn_if_no_moves(self):
+        if not self._is_nature_turn and not self.game_ended() and len(self.legal_moves) == 0:
+            self._goto_next_turn()
+
     cpdef void force_start(self, int start_player=0):
         """
         Force game to start with specified player, bypassing pre-game roll-off.

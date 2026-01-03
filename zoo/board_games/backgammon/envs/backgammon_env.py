@@ -1,3 +1,4 @@
+import copy
 import gymnasium as gym
 from gymnasium import spaces
 import numpy as np
@@ -14,6 +15,8 @@ import state
 
 from ding.envs import BaseEnv, BaseEnvTimestep
 from ding.utils import ENV_REGISTRY
+from ditk import logging
+from easydict import EasyDict
 from zoo.board_games.backgammon.envs.backgammon_bot import BackgammonRandomBot
 
 # Observation type constants
@@ -42,14 +45,26 @@ class BackgammonEnv(BaseEnv):
         battle_mode='self_play_mode',
         # obs_type: 'minimal', 'standard', or 'features'
         obs_type=OBS_STANDARD,
+        # reward_scale: normalize terminal rewards by this value
+        reward_scale=3.0,
     )
 
+    @classmethod
+    def default_config(cls: type) -> EasyDict:
+        cfg = EasyDict(copy.deepcopy(cls.config))
+        cfg.cfg_type = cls.__name__ + 'Dict'
+        return cfg
+
     def __init__(self, cfg: dict = None) -> None:
-        self.cfg = cfg
+        default_config = self.default_config()
+        if cfg is not None:
+            default_config.update(cfg)
+        self.cfg = default_config
         self._init_flag = False
         self._current_player = 0  # White
-        self.battle_mode = cfg.battle_mode
-        self.obs_type = getattr(cfg, 'obs_type', OBS_STANDARD)
+        self.battle_mode = self.cfg.battle_mode
+        self.obs_type = getattr(self.cfg, 'obs_type', OBS_STANDARD)
+        self.reward_scale = float(getattr(self.cfg, 'reward_scale', 3.0))
         self._rng = random.Random()
 
         # Initialize Bot if needed
@@ -79,7 +94,7 @@ class BackgammonEnv(BaseEnv):
         self.game.reset()
 
         # Start game with player 0, roll dice (doubles allowed), ready for movement
-        self.game.force_start(start_player=0)
+        self.game.force_start(start_player=start_player_index)
         self._current_player = self.game.get_player_turn()
 
         # In bot mode, if no legal actions (auto-passed), advance until agent can play
@@ -156,6 +171,55 @@ class BackgammonEnv(BaseEnv):
         acting_player = self._current_player
 
         legal_moves = self.game.get_moves()
+        if len(legal_moves) == 0:
+            self.game.advance_turn_if_no_moves()
+            if not self.game.game_ended():
+                self.game.auto_roll()
+            done = self.game.game_ended()
+            winner = self.game.get_winner()
+            reward = 0
+            if done:
+                win_value = self._get_win_value(winner)
+                if self.battle_mode == 'play_with_bot_mode':
+                    reward = win_value if winner == 0 else -win_value
+                else:
+                    reward = win_value if winner == acting_player else -win_value
+            if done and self.reward_scale > 0:
+                reward = reward / self.reward_scale
+            self._current_player = self.game.get_player_turn()
+            obs = self.observe()
+            return BaseEnvTimestep(obs, reward, done, {'action_mask': obs['action_mask']})
+
+        if isinstance(action, np.ndarray):
+            action = int(action)
+        legal_actions = [i for i, x in enumerate(self.observe()['action_mask']) if x == 1]
+        if len(legal_actions) == 0:
+            if self.game.is_nature_turn():
+                self.game.auto_roll()
+            else:
+                self.game.advance_turn_if_no_moves()
+                if not self.game.game_ended():
+                    self.game.auto_roll()
+            done = self.game.game_ended()
+            winner = self.game.get_winner()
+            reward = 0
+            if done:
+                win_value = self._get_win_value(winner)
+                if self.battle_mode == 'play_with_bot_mode':
+                    reward = win_value if winner == 0 else -win_value
+                else:
+                    reward = win_value if winner == acting_player else -win_value
+            if done and self.reward_scale > 0:
+                reward = reward / self.reward_scale
+            self._current_player = self.game.get_player_turn()
+            obs = self.observe()
+            return BaseEnvTimestep(obs, reward, done, {'action_mask': obs['action_mask']})
+        if action not in legal_actions:
+            logging.warning(
+                f"You input illegal action: {action}, the legal_actions are {legal_actions}. "
+                f"Now we randomly choice a action from legal_actions."
+            )
+            action = np.random.choice(legal_actions)
 
         # Decode action
         src = action // 2
@@ -201,6 +265,8 @@ class BackgammonEnv(BaseEnv):
             else:
                 # Self-play: from acting player's perspective
                 reward = win_value if winner == acting_player else -win_value
+            if self.reward_scale > 0:
+                reward = reward / self.reward_scale
 
         self._current_player = self.game.get_player_turn()
 
@@ -677,6 +743,8 @@ class BackgammonEnv(BaseEnv):
     def seed(self, seed: int, dynamic_seed: bool = True) -> None:
         """Set the random seed for the environment."""
         self._rng.seed(seed)
+        np.random.seed(seed)
+        self.game.seed(seed)
 
     def close(self) -> None:
         """Clean up resources. No-op for this environment."""
