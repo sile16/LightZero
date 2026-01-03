@@ -35,6 +35,10 @@ OBS_SHAPES = {
     OBS_WITH_FEATURES: (52, 1, 25),
 }
 
+# Chance outcomes: unordered dice pairs mapped to [0, 20].
+_CHANCE_OUTCOMES = [(i, j) for i in range(1, 7) for j in range(i, 7)]
+_CHANCE_MAP = {pair: idx for idx, pair in enumerate(_CHANCE_OUTCOMES)}
+
 
 @ENV_REGISTRY.register('backgammon')
 class BackgammonEnv(BaseEnv):
@@ -66,6 +70,8 @@ class BackgammonEnv(BaseEnv):
         self.obs_type = getattr(self.cfg, 'obs_type', OBS_STANDARD)
         self.reward_scale = float(getattr(self.cfg, 'reward_scale', 3.0))
         self._rng = random.Random()
+        self.chance_space_size = 21
+        self._turn_dice = None
 
         # Initialize Bot if needed
         if self.battle_mode == 'play_with_bot_mode':
@@ -96,6 +102,7 @@ class BackgammonEnv(BaseEnv):
         # Start game with player 0, roll dice (doubles allowed), ready for movement
         self.game.force_start(start_player=start_player_index)
         self._current_player = self.game.get_player_turn()
+        self._update_turn_dice_from_remaining()
 
         # In bot mode, if no legal actions (auto-passed), advance until agent can play
         if self.battle_mode == 'play_with_bot_mode':
@@ -119,6 +126,7 @@ class BackgammonEnv(BaseEnv):
         self.game.set_nature_turn(False)
         self.game.generate_movement_moves()
         self._current_player = self.game.get_player_turn()
+        self._set_turn_dice_from_values(dice_values)
 
     def set_current_player(self, player):
         """
@@ -175,6 +183,7 @@ class BackgammonEnv(BaseEnv):
             self.game.advance_turn_if_no_moves()
             if not self.game.game_ended():
                 self.game.auto_roll()
+                self._update_turn_dice_from_remaining()
             done = self.game.game_ended()
             winner = self.game.get_winner()
             reward = 0
@@ -196,10 +205,12 @@ class BackgammonEnv(BaseEnv):
         if len(legal_actions) == 0:
             if self.game.is_nature_turn():
                 self.game.auto_roll()
+                self._update_turn_dice_from_remaining()
             else:
                 self.game.advance_turn_if_no_moves()
                 if not self.game.game_ended():
                     self.game.auto_roll()
+                    self._update_turn_dice_from_remaining()
             done = self.game.game_ended()
             winner = self.game.get_winner()
             reward = 0
@@ -248,6 +259,7 @@ class BackgammonEnv(BaseEnv):
             # After move, auto-roll if turn switched to nature turn
             if not self.game.game_ended():
                 self.game.auto_roll()
+                self._update_turn_dice_from_remaining()
 
         # Check for game end
         done = self.game.game_ended()
@@ -400,8 +412,36 @@ class BackgammonEnv(BaseEnv):
         return {
             'observation': obs_vector,
             'action_mask': mask,
-            'to_play': (self._current_player + 1) if self.battle_mode == 'self_play_mode' else -1
+            'to_play': (self._current_player + 1) if self.battle_mode == 'self_play_mode' else -1,
+            'chance': self._get_chance_value(self._turn_dice),
         }
+
+    def _get_chance_value(self, dice_values):
+        if not dice_values:
+            return -1
+        die1, die2 = dice_values
+        ordered = (die1, die2) if die1 <= die2 else (die2, die1)
+        return _CHANCE_MAP[ordered]
+
+    def _set_turn_dice_from_values(self, dice_values):
+        if not dice_values:
+            self._turn_dice = None
+            return
+        if len(dice_values) >= 2:
+            if len(dice_values) == 4:
+                self._turn_dice = (dice_values[0], dice_values[0])
+            else:
+                self._turn_dice = (dice_values[0], dice_values[1])
+
+    def _update_turn_dice_from_remaining(self):
+        remaining = self.game.get_remaining_dice()
+        if len(remaining) == 0:
+            self._turn_dice = None
+            return
+        if len(remaining) == 4:
+            self._turn_dice = (remaining[0], remaining[0])
+        elif len(remaining) == 2:
+            self._turn_dice = (remaining[0], remaining[1])
 
     def _get_obs_minimal(self, slot0_playable=False, slot1_playable=False):
         """

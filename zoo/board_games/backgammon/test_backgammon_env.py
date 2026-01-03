@@ -6,6 +6,7 @@ Tests cover:
 - Auto-dice rolling in reset
 - Step execution and turn transitions
 - Action mask correctness
+- Chance label exposure for stochastic MuZero
 - set_dice test helper
 - Bot mode behavior
 - Complete game simulation
@@ -74,9 +75,11 @@ class TestBackgammonEnvReset:
         assert 'observation' in obs
         assert 'action_mask' in obs
         assert 'to_play' in obs
+        assert 'chance' in obs
         assert obs['observation'].shape == (47, 1, 25)  # standard obs_type default
         assert obs['action_mask'].shape == (50,)
         assert obs['to_play'] in [1, 2]
+        assert 0 <= obs['chance'] <= 20
 
     def test_reset_deterministic_with_seed(self):
         cfg = EasyDict(dict(battle_mode='self_play_mode'))
@@ -107,6 +110,39 @@ class TestBackgammonConfigConsistency:
         obs_shape = OBS_SHAPES[env_obs_type]
         assert backgammon_alphazero_config.policy.model.observation_shape == obs_shape
         assert backgammon_alphazero_config.policy.model.image_channel == obs_shape[0]
+
+    def test_stochastic_config_obs_and_chance(self):
+        from zoo.board_games.backgammon.config.backgammon_stochastic_muzero_bot_mode_config import (
+            backgammon_stochastic_muzero_config,
+        )
+
+        env_obs_type = backgammon_stochastic_muzero_config.env.obs_type
+        obs_shape = OBS_SHAPES[env_obs_type]
+        assert backgammon_stochastic_muzero_config.policy.model.observation_shape == obs_shape
+        assert backgammon_stochastic_muzero_config.policy.model.image_channel == obs_shape[0]
+        assert backgammon_stochastic_muzero_config.policy.model.chance_space_size == 21
+
+
+class TestBackgammonEnvChance:
+    """Tests for chance label exposure and mapping."""
+
+    def test_chance_mapping_has_21_unique_values(self):
+        cfg = EasyDict(dict(battle_mode='self_play_mode'))
+        env = BackgammonEnv(cfg)
+        mapping_values = []
+        for die1 in range(1, 7):
+            for die2 in range(die1, 7):
+                mapping_values.append(env._get_chance_value((die1, die2)))
+        assert sorted(mapping_values) == list(range(21))
+
+    def test_chance_matches_set_dice(self):
+        cfg = EasyDict(dict(battle_mode='self_play_mode'))
+        env = BackgammonEnv(cfg)
+        env.reset()
+
+        env.set_dice([6, 1])
+        obs = env.observe()
+        assert obs['chance'] == env._get_chance_value((1, 6))
 
 
 class TestBackgammonEnvStep:
@@ -139,6 +175,8 @@ class TestBackgammonEnvStep:
 
         assert 'observation' in timestep.obs
         assert 'action_mask' in timestep.obs
+        assert 'chance' in timestep.obs
+        assert 0 <= timestep.obs['chance'] <= 20
 
     def test_step_has_legal_actions_if_not_done(self):
         cfg = EasyDict(dict(battle_mode='self_play_mode'))

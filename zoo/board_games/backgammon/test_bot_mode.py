@@ -3,6 +3,7 @@
 Bot mode simulates playing against an AI opponent where:
 - Player 0 is the human/agent
 - Player 1 is the bot (plays automatically)
+- Chance labels are exposed for stochastic training
 """
 import sys
 import os
@@ -38,6 +39,7 @@ class TestBotModeInit:
         obs = env.reset()
         assert env._current_player == 0, "Agent should be player 0"
         assert obs['to_play'] == -1
+        assert 0 <= obs['chance'] <= 20
 
 
 class TestBotModeGameplay:
