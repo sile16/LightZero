@@ -272,7 +272,7 @@ class MuZeroEvaluator(ISerialEvaluator):
             ready_env_id = set()
             remain_episode = n_episode
             eps_steps_lst = np.zeros(env_nums)
-            
+
             with self._timer:
                 while not eval_monitor.is_finished():
                     # Get current ready env obs.
@@ -397,6 +397,7 @@ class MuZeroEvaluator(ISerialEvaluator):
                                 saved_info.update(episode_timestep.info['episode_info'])
                             eval_monitor.update_info(env_id, saved_info)
                             eval_monitor.update_reward(env_id, reward)
+
                             self._logger.info(
                                 "[EVALUATOR]env {} finish episode, final reward: {}, current episode: {}".format(
                                     env_id, eval_monitor.get_latest_reward(env_id), eval_monitor.get_current_episode()

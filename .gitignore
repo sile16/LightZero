@@ -198,6 +198,10 @@ local.properties
 .idea/**/sqlDataSources.xml
 .idea/**/dynamic.xml
 .idea/**/uiDesigner.xml
+
+# Local virtual environments and tracking runs
+venv*/
+wandb*/
 .idea/**/dbnavigator.xml
 
 # Gradle

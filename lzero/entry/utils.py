@@ -89,6 +89,58 @@ def calculate_update_per_collect(cfg: 'EasyDict', new_data: List[List[torch.Tens
 
     return update_per_collect
 
+
+def progressive_simulation_schedule(
+    total_iterations: int,
+    total_budget: int,
+    n_min: int,
+    n_max: int,
+) -> List[int]:
+    """
+    Progressive simulation budget allocation from https://arxiv.org/html/2310.11305v3 (Algorithm 1).
+    Returns a list of per-iteration simulation counts with sum equal to total_budget.
+    """
+    if total_iterations <= 0:
+        raise ValueError("total_iterations must be positive")
+    if n_min <= 0 or n_max <= 0:
+        raise ValueError("n_min and n_max must be positive")
+    if n_min > n_max:
+        raise ValueError("n_min must be <= n_max")
+
+    remaining_budget = total_budget - total_iterations * n_min
+    if remaining_budget < 0:
+        raise ValueError("total_budget is too small for the given n_min and total_iterations")
+
+    schedule: List[int] = []
+    n = n_max
+
+    while remaining_budget > 0 and n > n_min and total_iterations - len(schedule) > 0:
+        if n == n_min:
+            break
+        chunk = int((remaining_budget * 0.5) // (n - n_min))
+        i = min(chunk, total_iterations - len(schedule))
+        if i <= 0:
+            break
+        schedule = [n] * i + schedule
+        remaining_budget -= i * (n - n_min)
+        n = n // 2
+
+    if total_iterations - len(schedule) > 0:
+        schedule = [n_min] * (total_iterations - len(schedule)) + schedule
+
+    while remaining_budget > 0:
+        min_val = min(schedule)
+        min_indices = [idx for idx, val in enumerate(schedule) if val == min_val]
+        k = len(min_indices)
+        if k == 0:
+            break
+        i = min(remaining_budget, k)
+        for idx in min_indices[-i:]:
+            schedule[idx] += 1
+        remaining_budget -= i
+
+    return schedule
+
 def initialize_zeros_batch(observation_shape: Union[int, List[int], Tuple[int]], batch_size: int, device: str) -> torch.Tensor:
     """
     Overview:

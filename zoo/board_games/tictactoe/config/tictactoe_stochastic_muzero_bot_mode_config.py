@@ -22,10 +22,10 @@ use_ture_chance_label_in_chance_encoder = True
 tictactoe_stochastic_muzero_config = dict(
     exp_name=f'data_stochastic_mz/tictactoe_stochastic_muzero_bot-mode_ns{num_simulations}_upc{update_per_collect}_rer{reanalyze_ratio}_seed0',
     env=dict(
-        battle_mode='play_with_bot_mode',
+        battle_mode='play_with_bot_mode',  # self_play_mode has subprocess sync issues
         collector_env_num=collector_env_num,
         evaluator_env_num=evaluator_env_num,
-        n_evaluator_episode=100,
+        n_evaluator_episode=evaluator_env_num,  # Match env_num to avoid subprocess reset issues
         manager=dict(shared_memory=False, ),
     ),
     policy=dict(

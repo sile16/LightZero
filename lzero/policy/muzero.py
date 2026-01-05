@@ -107,6 +107,14 @@ class MuZeroPolicy(Policy):
         monitor_extra_statistics=True,
         # (int) The transition number of one ``GameSegment``.
         game_segment_length=200,
+        # (dict) Progressive simulation schedule for training (paper: 2310.11305v3).
+        progressive_simulation=dict(
+            enable=False,
+            total_iterations=None,
+            total_budget=None,
+            n_min=2,
+            n_max=None,
+        ),
         # (bool): Indicates whether to perform an offline evaluation of the checkpoint (ckpt).
         # If set to True, the checkpoint will be evaluated after the training process is complete.
         # IMPORTANT: Setting eval_offline to True requires configuring the saving of checkpoints to align with the evaluation frequency.
@@ -268,6 +276,15 @@ class MuZeroPolicy(Policy):
         """
         self.train_iter = train_iter
         self.env_step = env_step
+
+    def set_num_simulations(self, num_simulations: int) -> None:
+        """Update MCTS simulation count for collect/eval modes."""
+        num_simulations = int(num_simulations)
+        self._cfg.num_simulations = num_simulations
+        if hasattr(self, '_mcts_collect') and hasattr(self._mcts_collect, '_cfg'):
+            self._mcts_collect._cfg.num_simulations = num_simulations
+        if hasattr(self, '_mcts_eval') and hasattr(self._mcts_eval, '_cfg'):
+            self._mcts_eval._cfg.num_simulations = num_simulations
 
     def _init_learn(self) -> None:
         """
@@ -1053,4 +1070,3 @@ class MuZeroPolicy(Policy):
     def _get_train_sample(self, data):
         # be compatible with DI-engine Policy class
         pass
-

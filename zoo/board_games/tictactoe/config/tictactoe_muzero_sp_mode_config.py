@@ -6,17 +6,22 @@ from easydict import EasyDict
 collector_env_num = 8
 n_episode = 8
 evaluator_env_num = 5
-num_simulations = 25
+num_simulations = 50
 update_per_collect = 50
 batch_size = 256
 max_env_step = int(2e5)
 reanalyze_ratio = 0.
+# Progressive simulation settings
+progressive_simulation_enabled = True
+progressive_n_min = 2
+progressive_n_max = num_simulations  # 50
+progressive_total_iterations = 115000  # Based on previous run reaching ~114k iterations
 # ==============================================================
 # end of the most frequently changed config specified by the user
 # ==============================================================
 
 tictactoe_muzero_config = dict(
-    exp_name=f'data_muzero/tictactoe_muzero_sp-mode_ns{num_simulations}_upc{update_per_collect}_rer{reanalyze_ratio}_seed0',
+    exp_name=f'data_muzero/tictactoe_muzero_sp-mode_ns{num_simulations}_upc{update_per_collect}_progressive_seed0',
     env=dict(
         battle_mode='self_play_mode',
         collector_env_num=collector_env_num,
@@ -52,6 +57,13 @@ tictactoe_muzero_config = dict(
         grad_clip_value=0.5,
         num_simulations=num_simulations,
         reanalyze_ratio=reanalyze_ratio,
+        progressive_simulation=dict(
+            enable=progressive_simulation_enabled,
+            total_iterations=progressive_total_iterations,
+            total_budget=None,  # Auto-computed as total_iterations * num_simulations
+            n_min=progressive_n_min,
+            n_max=progressive_n_max,
+        ),
         # NOTE：In board_games, we set large td_steps to make sure the value target is the final outcome.
         td_steps=9,
         num_unroll_steps=3,
@@ -62,6 +74,9 @@ tictactoe_muzero_config = dict(
         replay_buffer_size=int(1e4),
         collector_env_num=collector_env_num,
         evaluator_env_num=evaluator_env_num,
+        # wandb config
+        use_wandb=True,
+        wandb_project='LightZero - TicTacToe',
     ),
 )
 tictactoe_muzero_config = EasyDict(tictactoe_muzero_config)

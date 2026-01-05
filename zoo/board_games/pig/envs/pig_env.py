@@ -30,10 +30,14 @@ class PigEnv(BaseEnv):
         env_id="Pig",
         # Target score to win
         target_score=100,
+        # Maximum steps per episode (prevents infinite games)
+        max_episode_steps=200,
         # Battle mode: 'self_play_mode' or 'play_with_bot_mode'
         battle_mode='self_play_mode',
         # Bot type for play_with_bot_mode
         bot_action_type='random',  # 'random' or 'hold_at_20'
+        # Starting player index (0 = model first, 1 = bot first in play_with_bot_mode)
+        start_player_index=0,
         # Observation type
         channel_last=False,
         # Stochastic MuZero settings
@@ -54,8 +58,10 @@ class PigEnv(BaseEnv):
         self._cfg = default_config
 
         self.target_score = self._cfg.target_score
+        self.max_episode_steps = self._cfg.max_episode_steps
         self.battle_mode = self._cfg.battle_mode
         self.bot_action_type = self._cfg.bot_action_type
+        self._default_start_player_index = self._cfg.get('start_player_index', 0)
 
         # Action space: 0 = roll, 1 = hold
         self.action_space_size = 2
@@ -74,8 +80,12 @@ class PigEnv(BaseEnv):
         self._action_space = gym.spaces.Discrete(2)
         self._reward_space = gym.spaces.Box(low=-1, high=1, shape=(1,), dtype=np.float32)
 
-    def reset(self, start_player_index=0, init_state=None, **kwargs):
+    def reset(self, start_player_index=None, init_state=None, **kwargs):
         """Reset the game."""
+        # Use default from config if not specified
+        if start_player_index is None:
+            start_player_index = self._default_start_player_index
+
         self.scores = [0, 0]  # Player 1 and 2 total scores
         self.turn_score = 0   # Current turn's accumulated score
         self.start_player_index = start_player_index
@@ -83,6 +93,13 @@ class PigEnv(BaseEnv):
         self.done = False
         self.winner = -1
         self.chance = 0  # Reset chance (no roll)
+        self._step_count = 0  # Track steps for max_episode_steps
+
+        # In play_with_bot_mode, if bot goes first (start_player_index=1), let bot play
+        if self.battle_mode == 'play_with_bot_mode' and start_player_index == 1:
+            while self._current_player == 2 and not self.done:
+                bot_action = self._bot_action()
+                self._player_step(bot_action)
 
         obs = self._get_obs()
         return obs
@@ -149,7 +166,16 @@ class PigEnv(BaseEnv):
         reward = 0.0
         info = {}
 
+        self._step_count += 1
         my_idx = 0 if self._current_player == 1 else 1
+
+        # Check for max episode steps (game ends in draw)
+        if self._step_count >= self.max_episode_steps:
+            self.done = True
+            self.winner = -1  # Draw
+            obs = self._get_obs()
+            info['eval_episode_return'] = 0.0  # Draw
+            return BaseEnvTimestep(obs, np.float32(0.0), self.done, info)
 
         if action == 0:  # Roll
             # Roll the die (stochastic event)

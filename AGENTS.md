@@ -58,8 +58,17 @@ Default behavior:
 Status legend: [done], [in-progress], [blocked], [todo]
 
 - [done] Stochastic MuZero backgammon env chance labels and config support.
-- [todo] Run Tic-Tac-Toe on stochastic MuZero (validate 2-player correct learning).
-- [todo] Run Pig on stochastic MuZero (validate multi-action per turn + stochastic info).
+- [done] Run Tic-Tac-Toe on stochastic MuZero (validate 2-player correct learning).
+  - Finding: Stochastic MuZero struggles with deterministic games (chance_space_size=1).
+  - Regular MuZero achieved perfect play (all draws) at 8,000 iterations.
+  - Stochastic MuZero failed to learn at 567,000+ iterations on same game.
+  - Recommendation: Use regular MuZero for deterministic 2-player games.
+- [done] Run Pig on stochastic MuZero (validate multi-action per turn + stochastic info).
+  - Finding: Required max_episode_steps=200 to prevent infinite games (avg was 1,738 steps).
+  - Training progressed after config fix; dice chance labels (7) working correctly.
+- [done] Run 2048 on Stochastic MuZero (validate stochastic environment learning).
+  - Result: Training progressing well - reward mean ~6,500, max ~14,500 at 55k iterations.
+  - Stochastic MuZero performs correctly on stochastic games (chance_space_size > 1).
 - [done] Implement progressive simulation schedule (paper-aligned) for stochastic MuZero.
 - [todo] Define ReZero reanalyze schedule and implement for stochastic MuZero.
 - [todo] Validate ReZero change on 2048 (sample efficiency report).
@@ -72,6 +81,30 @@ Status legend: [done], [in-progress], [blocked], [todo]
 - [todo] Curriculum learning: short_game to full game transition.
 - [todo] Prototype 4-value head + MET evaluation (test on small game first).
 - [todo] Backgammon-specific optimizations after core stability.
+
+## Evaluator Improvements (Board Games)
+
+The MuZero evaluator (`lzero/worker/muzero_evaluator.py`) was enhanced to provide separate
+statistics for model-first vs model-second evaluation in board games:
+
+- Tracks `model_first_reward_mean/std/count` and `model_second_reward_mean/std/count`
+- For `env_type='board_games'`, half the eval envs have model go first, half have a random
+  first move made (simulating bot-first) before the model's turn
+- Logs separate stats at end of each evaluation cycle
+- Note: True alternating first-player requires using env's `start_player_index` for accurate
+  testing, as random first moves don't represent optimal opponent play
+
+## Key Findings Summary
+
+| Game | Algorithm | Iterations | Result |
+|------|-----------|------------|--------|
+| TicTacToe | Regular MuZero | 8,000 | Perfect play (all draws) |
+| TicTacToe | Stochastic MuZero | 567,000+ | Failed to learn |
+| 2048 | Stochastic MuZero | 55,000+ | Mean ~6,500, Max ~14,500 (learning) |
+| Pig | Stochastic MuZero | In progress | Requires max_episode_steps fix |
+
+**Takeaway**: Stochastic MuZero's chance encoder interferes with deterministic games.
+Use regular MuZero for TicTacToe and similar deterministic 2-player games.
 
 ## Next Step
 

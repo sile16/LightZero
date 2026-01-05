@@ -85,8 +85,9 @@ def train_unizero(
     # Initialize wandb if specified
     if cfg.policy.use_wandb:
         logging.info("Initializing wandb...")
+        wandb_project = cfg.policy.get('wandb_project', 'LightZero')
         wandb.init(
-            project="LightZero",
+            project=wandb_project,
             config=cfg,
             sync_tensorboard=False,
             monitor_gym=False,

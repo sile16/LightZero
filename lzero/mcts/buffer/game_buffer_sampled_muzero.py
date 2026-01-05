@@ -379,8 +379,8 @@ class SampledMuZeroGameBuffer(MuZeroGameBuffer):
                     bootstrap_index = current_index + td_steps_list[value_index]
                     for i, reward in enumerate(reward_list[current_index:bootstrap_index]):
                         if self._cfg.env_type == 'board_games' and to_play_segment[0][0] in [1, 2]:
-                            # TODO(pu): for board_games, very important, to check
-                            if to_play_list[base_index] == to_play_list[i]:
+                            # Use current_index + i to get the correct player at each reward step
+                            if to_play_list[base_index] == to_play_list[current_index + i]:
                                 value_list[value_index] += reward * self._cfg.discount_factor ** i
                             else:
                                 value_list[value_index] += -reward * self._cfg.discount_factor ** i

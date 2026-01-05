@@ -50,6 +50,8 @@ class TicTacToeEnv(BaseEnv):
         battle_mode_in_simulation_env='self_play_mode',
         # (str): The type of action the bot should take. Choices are 'v0' or 'alpha_beta_pruning'.
         bot_action_type='v0',
+        # (int): The index of the player who starts. 0 = model first, 1 = bot first (in play_with_bot_mode).
+        start_player_index=0,
         # (str): The folder path where replay video saved, if None, will not save replay video.
         replay_path=None,
         # (bool): If True, the agent will play against a human.
@@ -101,6 +103,11 @@ class TicTacToeEnv(BaseEnv):
         self.alphazero_mcts_ctree = self._cfg.alphazero_mcts_ctree
         self._replay_path = self._cfg.replay_path if hasattr(self._cfg, "replay_path") and self._cfg.replay_path is not None else None
         self._save_replay_count = 0
+        # Default start_player_index from config (0 = model first, 1 = bot first)
+        self._default_start_player_index = self._cfg.get('start_player_index', 0)
+        # Stochastic MuZero support: TicTacToe is deterministic, so chance is always 0
+        self.chance = 0
+        self.chance_space_size = 1  # Only one "chance" outcome (no randomness)
 
     @property
     def legal_actions(self):
@@ -132,7 +139,7 @@ class TicTacToeEnv(BaseEnv):
         # Convert NumPy arrays to nested tuples to make them hashable.
         return _get_done_winner_func_lru(tuple(map(tuple, self.board)))
 
-    def reset(self, start_player_index=0, init_state=None, katago_policy_init=False, katago_game_state=None):
+    def reset(self, start_player_index=None, init_state=None, katago_policy_init=False, katago_game_state=None):
         """
         Overview:
             This method resets the environment and optionally starts with a custom state specified by 'init_state'.
@@ -146,6 +153,10 @@ class TicTacToeEnv(BaseEnv):
             - katago_game_state (:obj:`Any`, optional): This parameter is similar to 'katago_policy_init' and is used to
                 maintain compatibility with 'katago' in 'alphazero_mcts_ctree'. Defaults to None.
         """
+        # Use default from config if not specified
+        if start_player_index is None:
+            start_player_index = self._default_start_player_index
+
         if self.alphazero_mcts_ctree and init_state is not None:
             # Convert byte string to np.ndarray
             init_state = np.frombuffer(init_state, dtype=np.int32)
@@ -173,6 +184,14 @@ class TicTacToeEnv(BaseEnv):
         action_mask[self.legal_actions] = 1
 
         if self.battle_mode == 'play_with_bot_mode' or self.battle_mode == 'eval_mode':
+            # If start_player_index=1 (bot goes first), have the bot make the first move
+            if self.start_player_index == 1:
+                bot_action = self.bot_action()
+                self._player_step(bot_action)
+                # Update action mask after bot's move
+                action_mask = np.zeros(self.total_num_actions, 'int8')
+                action_mask[self.legal_actions] = 1
+
             # In ``play_with_bot_mode`` and ``eval_mode``, we need to set the "to_play" parameter in the "obs" dict to -1,
             # because we don't take into account the alternation between players.
             # The "to_play" parameter is used in the MCTS algorithm.
@@ -181,7 +200,8 @@ class TicTacToeEnv(BaseEnv):
                 'action_mask': action_mask,
                 'board': copy.deepcopy(self.board),
                 'current_player_index': self.start_player_index,
-                'to_play': -1
+                'to_play': -1,
+                'chance': self.chance  # Stochastic MuZero support (always 0 for deterministic game)
             }
         elif self.battle_mode == 'self_play_mode':
             # In the "self_play_mode", we set to_play=self.current_player in the "obs" dict,
@@ -191,7 +211,8 @@ class TicTacToeEnv(BaseEnv):
                 'action_mask': action_mask,
                 'board': copy.deepcopy(self.board),
                 'current_player_index': self.start_player_index,
-                'to_play': self.current_player
+                'to_play': self.current_player,
+                'chance': self.chance  # Stochastic MuZero support (always 0 for deterministic game)
             }
         if self._replay_path is not None:
             self._frames = []
@@ -347,7 +368,8 @@ class TicTacToeEnv(BaseEnv):
             'action_mask': action_mask,
             'board': copy.deepcopy(self.board),
             'current_player_index': self.players.index(self.current_player),
-            'to_play': self.current_player
+            'to_play': self.current_player,
+            'chance': self.chance  # Stochastic MuZero support (always 0 for deterministic game)
         }
         return BaseEnvTimestep(obs, reward, done, info)
 

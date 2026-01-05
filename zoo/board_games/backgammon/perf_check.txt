@@ -1,0 +1,4 @@
+Backgammon perf check
+steps: 2000
+total_seconds: 0.530071
+steps_per_second: 3773.08

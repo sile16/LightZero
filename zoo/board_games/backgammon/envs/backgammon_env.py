@@ -52,6 +52,8 @@ class BackgammonEnv(BaseEnv):
         obs_type=OBS_STANDARD,
         # reward_scale: normalize terminal rewards by this value
         reward_scale=3.0,
+        # Starting player index (0 = model first, 1 = bot first in play_with_bot_mode)
+        start_player_index=0,
     )
 
     @classmethod
@@ -70,6 +72,7 @@ class BackgammonEnv(BaseEnv):
         self.battle_mode = self.cfg.battle_mode
         self.obs_type = getattr(self.cfg, 'obs_type', OBS_STANDARD)
         self.reward_scale = float(getattr(self.cfg, 'reward_scale', 3.0))
+        self._default_start_player_index = getattr(self.cfg, 'start_player_index', 0)
         self._rng = random.Random()
         # 21 dice outcomes + 1 "no roll" outcome for deterministic transitions.
         self.chance_space_size = 22
@@ -98,7 +101,11 @@ class BackgammonEnv(BaseEnv):
 
         self.game = state.State()
 
-    def reset(self, start_player_index=0, init_state=None):
+    def reset(self, start_player_index=None, init_state=None):
+        # Use default from config if not specified
+        if start_player_index is None:
+            start_player_index = self._default_start_player_index
+
         self.game.reset()
 
         # Start game with player 0, roll dice (doubles allowed), ready for movement

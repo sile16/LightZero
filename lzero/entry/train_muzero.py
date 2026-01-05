@@ -14,7 +14,7 @@ from ding.utils import set_pkg_seed, get_rank
 from ding.worker import BaseLearner
 from tensorboardX import SummaryWriter
 
-from lzero.entry.utils import log_buffer_memory_usage, log_buffer_run_time
+from lzero.entry.utils import log_buffer_memory_usage, log_buffer_run_time, progressive_simulation_schedule
 from lzero.policy import visit_count_temperature
 from lzero.policy.random_policy import LightZeroRandomPolicy
 from lzero.worker import MuZeroCollector as Collector
@@ -84,8 +84,9 @@ def train_muzero(
 
     if cfg.policy.use_wandb:
         # Initialize wandb
+        wandb_project = cfg.policy.get('wandb_project', 'LightZero')
         wandb.init(
-            project="LightZero",
+            project=wandb_project,
             config=cfg,
             sync_tensorboard=False,
             monitor_gym=False,
@@ -106,6 +107,31 @@ def train_muzero(
     # MCTS+RL algorithms related core code
     # ==============================================================
     policy_config = cfg.policy
+    progressive_cfg = getattr(policy_config, 'progressive_simulation', None)
+    progressive_schedule = None
+    if progressive_cfg and progressive_cfg.enable:
+        total_iterations = progressive_cfg.total_iterations
+        if total_iterations is None:
+            if max_train_iter is not None and max_train_iter < int(1e9):
+                total_iterations = max_train_iter
+            else:
+                raise ValueError("progressive_simulation.total_iterations must be set")
+        total_budget = progressive_cfg.total_budget
+        if total_budget is None:
+            total_budget = int(total_iterations) * int(policy_config.num_simulations)
+        n_min = int(progressive_cfg.n_min)
+        n_max = int(progressive_cfg.n_max) if progressive_cfg.n_max is not None else int(policy_config.num_simulations)
+        progressive_schedule = progressive_simulation_schedule(
+            total_iterations=int(total_iterations),
+            total_budget=int(total_budget),
+            n_min=n_min,
+            n_max=n_max,
+        )
+        progressive_cfg.total_iterations = int(total_iterations)
+        progressive_cfg.total_budget = int(total_budget)
+        progressive_cfg.schedule = progressive_schedule
+        policy.set_num_simulations(progressive_schedule[0])
+        policy_config.num_simulations = progressive_schedule[0]
     batch_size = policy_config.batch_size
     # specific game buffer for MCTS+RL algorithms
     replay_buffer = GameBuffer(policy_config)
@@ -151,6 +177,14 @@ def train_muzero(
     stop, reward = evaluator.eval(learner.save_checkpoint, learner.train_iter, collector.envstep)
 
     while True:
+        if progressive_schedule is not None:
+            idx = min(learner.train_iter, len(progressive_schedule) - 1)
+            target_simulations = progressive_schedule[idx]
+            if policy_config.num_simulations != target_simulations:
+                policy.set_num_simulations(target_simulations)
+                policy_config.num_simulations = target_simulations
+                if tb_logger is not None:
+                    tb_logger.add_scalar('ProgressiveSimulation/num_simulations', target_simulations, learner.train_iter)
         log_buffer_memory_usage(learner.train_iter, replay_buffer, tb_logger)
         log_buffer_run_time(learner.train_iter, replay_buffer, tb_logger)
         collect_kwargs = {}

@@ -7,12 +7,12 @@ from easydict import EasyDict
 env_id = 'game_2048'
 action_space_size = 4
 use_ture_chance_label_in_chance_encoder = True
-collector_env_num = 8
-n_episode = 8
-evaluator_env_num = 3
-num_simulations = 100
-update_per_collect = 200
-batch_size = 512
+collector_env_num = 32      # 8 -> 32: use more CPU cores for parallel data collection
+n_episode = 64              # 32 -> 64: collect more episodes per iteration
+evaluator_env_num = 8       # 3 -> 8: faster evaluation
+num_simulations = 50        # 100 -> 50: faster MCTS (CPU bottleneck), 2x speedup in collection
+update_per_collect = 200    # 400 -> 200: rebalance training/collection ratio
+batch_size = 2048           # 512 -> 2048: better GPU memory utilization (24GB available)
 max_env_step = int(1e9)
 reanalyze_ratio = 0.
 num_of_possible_chance_tile = 2
@@ -50,6 +50,7 @@ game_2048_stochastic_muzero_config = dict(
         # (str) The path of the pretrained model. If None, the model will be initialized by the default model.
         model_path=None,
         use_ture_chance_label_in_chance_encoder=use_ture_chance_label_in_chance_encoder,
+        use_wandb=True,
         cuda=True,
         game_segment_length=200,
         update_per_collect=update_per_collect,
