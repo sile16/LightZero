@@ -26,7 +26,7 @@ pig_stochastic_muzero_config = dict(
         bot_action_type='hold_at_20',
         collector_env_num=collector_env_num,
         evaluator_env_num=evaluator_env_num,
-        n_evaluator_episode=evaluator_env_num,  # Match env_num to avoid subprocess reset issues
+        n_evaluator_episode=500,
         manager=dict(shared_memory=False),
         chance_space_size=chance_space_size,
     ),

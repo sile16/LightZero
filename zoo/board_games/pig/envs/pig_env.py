@@ -169,14 +169,6 @@ class PigEnv(BaseEnv):
         self._step_count += 1
         my_idx = 0 if self._current_player == 1 else 1
 
-        # Check for max episode steps (game ends in draw)
-        if self._step_count >= self.max_episode_steps:
-            self.done = True
-            self.winner = -1  # Draw
-            obs = self._get_obs()
-            info['eval_episode_return'] = 0.0  # Draw
-            return BaseEnvTimestep(obs, np.float32(0.0), self.done, info)
-
         if action == 0:  # Roll
             # Roll the die (stochastic event)
             die_roll = np.random.randint(1, 7)  # 1-6
@@ -203,6 +195,12 @@ class PigEnv(BaseEnv):
                 reward = 1.0
             else:
                 self._switch_player()
+
+        # Check for max episode steps (game ends in draw) after applying action
+        if not self.done and self._step_count >= self.max_episode_steps:
+            self.done = True
+            self.winner = -1  # Draw
+            reward = 0.0
 
         obs = self._get_obs()
 

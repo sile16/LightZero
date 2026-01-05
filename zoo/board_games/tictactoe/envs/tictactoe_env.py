@@ -199,7 +199,7 @@ class TicTacToeEnv(BaseEnv):
                 'observation': self.current_state()[1],
                 'action_mask': action_mask,
                 'board': copy.deepcopy(self.board),
-                'current_player_index': self.start_player_index,
+                'current_player_index': self.players.index(self._current_player),
                 'to_play': -1,
                 'chance': self.chance  # Stochastic MuZero support (always 0 for deterministic game)
             }
@@ -210,7 +210,7 @@ class TicTacToeEnv(BaseEnv):
                 'observation': self.current_state()[1],
                 'action_mask': action_mask,
                 'board': copy.deepcopy(self.board),
-                'current_player_index': self.start_player_index,
+                'current_player_index': self.players.index(self._current_player),
                 'to_play': self.current_player,
                 'chance': self.chance  # Stochastic MuZero support (always 0 for deterministic game)
             }
