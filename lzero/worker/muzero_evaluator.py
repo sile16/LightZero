@@ -274,9 +274,11 @@ class MuZeroEvaluator(ISerialEvaluator):
             ready_env_id = set()
             remain_episode = n_episode
             eps_steps_lst = np.zeros(env_nums)
+            # Simple episode counter to avoid race conditions with VectorEvalMonitor
+            total_episodes_completed = 0
 
             with self._timer:
-                while not eval_monitor.is_finished():
+                while total_episodes_completed < n_episode:
                     # Get current ready env obs.
                     obs = self._env.ready_obs
                     new_available_env_id = set(obs.keys()).difference(ready_env_id)
@@ -293,18 +295,25 @@ class MuZeroEvaluator(ISerialEvaluator):
                         time.sleep(0.01)
                         continue
 
+                    # Filter ready_env_id to only include envs that have valid data
+                    ready_env_id = {env_id for env_id in ready_env_id if env_id in timestep_dict}
+                    if not ready_env_id:
+                        time.sleep(0.01)
+                        continue
+
                     stack_obs = {env_id: game_segments[env_id].get_obs() for env_id in ready_env_id}
                     stack_obs = list(stack_obs.values())
 
-                    action_mask_dict = {env_id: action_mask_dict[env_id] for env_id in ready_env_id}
-                    to_play_dict = {env_id: to_play_dict[env_id] for env_id in ready_env_id}
-                    timestep_dict = {env_id: timestep_dict[env_id] for env_id in ready_env_id}
-                    action_mask = [action_mask_dict[env_id] for env_id in ready_env_id]
-                    to_play = [to_play_dict[env_id] for env_id in ready_env_id]
-                    timestep = [timestep_dict[env_id] for env_id in ready_env_id]
+                    # Create filtered copies for policy forward - don't overwrite original dicts
+                    action_mask_dict_filtered = {env_id: action_mask_dict[env_id] for env_id in ready_env_id}
+                    to_play_dict_filtered = {env_id: to_play_dict[env_id] for env_id in ready_env_id}
+                    timestep_dict_filtered = {env_id: timestep_dict[env_id] for env_id in ready_env_id}
+                    action_mask = [action_mask_dict_filtered[env_id] for env_id in ready_env_id]
+                    to_play = [to_play_dict_filtered[env_id] for env_id in ready_env_id]
+                    timestep = [timestep_dict_filtered[env_id] for env_id in ready_env_id]
 
                     if self.policy_config.use_ture_chance_label_in_chance_encoder:
-                        chance_dict = {env_id: chance_dict[env_id] for env_id in ready_env_id}
+                        chance_dict_filtered = {env_id: chance_dict[env_id] for env_id in ready_env_id}
 
                     stack_obs = to_ndarray(stack_obs)
                     stack_obs = prepare_observation(stack_obs, self.policy_config.model.model_type)
@@ -401,8 +410,13 @@ class MuZeroEvaluator(ISerialEvaluator):
                                 if matchup_name is not None:
                                     matchup_rewards.setdefault(matchup_name, []).append(reward)
                                     matchup_counts[matchup_name] = matchup_counts.get(matchup_name, 0) + 1
+                                # Remove string fields from saved_info to avoid mean computation error
+                                # (DI-engine's get_episode_info tries to compute mean of all values)
+                                for key in ['eval_matchup', 'eval_bot', 'eval_agent_role']:
+                                    saved_info.pop(key, None)
                             eval_monitor.update_info(env_id, saved_info)
                             eval_monitor.update_reward(env_id, reward)
+                            total_episodes_completed += 1
 
                             self._logger.info(
                                 "[EVALUATOR]env {} finish episode, final reward: {}, current episode: {}".format(

@@ -282,6 +282,54 @@ class MCTS(object):
         # Return the selected action and the output probability of each action.
         return action, action_probs
 
+    def get_next_actions_batch(
+            self,
+            state_configs: List[Dict[str, Any]],
+            policy_forward_fn: Callable,
+            temperature: float = 1.0,
+            sample: bool = True,
+            env_list: List[Type[BaseEnv]] = None
+    ) -> List[Tuple[int, List[float]]]:
+        """
+        Overview:
+            Batch version of get_next_action. Process multiple states in sequence.
+            Note: This is a simple sequential implementation for compatibility with the ptree.
+            For better performance, use the ctree implementation which supports true parallelism.
+        Arguments:
+            - state_configs (:obj:`List[Dict]`): List of state configurations for each environment.
+            - policy_forward_fn (:obj:`Function`): The Callable to compute the action probs and state value.
+              This should be a batch function that accepts a list of envs.
+            - temperature (:obj:`Float`): The exploration temperature.
+            - sample (:obj:`Bool`): Whether to sample an action from the probabilities.
+            - env_list (:obj:`List[BaseEnv]`): List of simulation environments for batch processing.
+        Returns:
+            - results (:obj:`List[Tuple]`): List of (action, action_probs) tuples.
+        """
+        results = []
+        if env_list is None:
+            env_list = [self.simulate_env] * len(state_configs)
+
+        # Create a wrapper that converts single-env calls to batch calls
+        # This is needed because get_next_action's _expand_leaf_node passes a single env,
+        # but policy_forward_fn (e.g. _policy_value_fn_batch) expects a list of envs.
+        def single_env_policy_wrapper(env):
+            batch_result = policy_forward_fn([env])
+            return batch_result[0]
+
+        for state_config, env in zip(state_configs, env_list):
+            # Temporarily swap the simulate env for this call
+            original_env = self.simulate_env
+            self.simulate_env = env
+            try:
+                action, action_probs = self.get_next_action(
+                    state_config, single_env_policy_wrapper, temperature, sample
+                )
+                results.append((action, action_probs))
+            finally:
+                self.simulate_env = original_env
+
+        return results
+
     def _simulate(self, node: Node, simulate_env: Type[BaseEnv], policy_value_func: Callable) -> None:
         """
         Overview:

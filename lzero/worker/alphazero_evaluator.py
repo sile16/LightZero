@@ -1,3 +1,4 @@
+import time
 from collections import namedtuple
 from typing import Optional, Callable, Tuple, Dict
 
@@ -204,13 +205,19 @@ class AlphaZeroEvaluator(ISerialEvaluator):
             eval_monitor = VectorEvalMonitor(self._env.env_num, n_episode)
             matchup_rewards: Dict[str, list] = {}
             matchup_counts: Dict[str, int] = {}
+            # Simple episode counter to avoid race conditions with VectorEvalMonitor
+            total_episodes_completed = 0
             self._env.reset()
             self._policy.reset()
 
             with self._timer:
-                while not eval_monitor.is_finished():
+                while total_episodes_completed < n_episode:
                     obs = self._env.ready_obs
-                    
+                    if not obs:
+                        # All ready envs have completed their quotas, wait for others
+                        time.sleep(0.01)
+                        continue
+
                     # ==============================================================
                     # policy forward
                     # ==============================================================
@@ -239,8 +246,13 @@ class AlphaZeroEvaluator(ISerialEvaluator):
                                 if matchup_name is not None:
                                     matchup_rewards.setdefault(matchup_name, []).append(reward)
                                     matchup_counts[matchup_name] = matchup_counts.get(matchup_name, 0) + 1
+                                # Remove string fields from saved_info to avoid mean computation error
+                                # (DI-engine's get_episode_info tries to compute mean of all values)
+                                for key in ['eval_matchup', 'eval_bot', 'eval_agent_role']:
+                                    saved_info.pop(key, None)
                             eval_monitor.update_info(env_id, saved_info)
                             eval_monitor.update_reward(env_id, reward)
+                            total_episodes_completed += 1
                             self._logger.info(
                                 "[EVALUATOR]env {} finish episode, final reward: {}, current episode: {}".format(
                                     env_id, eval_monitor.get_latest_reward(env_id), eval_monitor.get_current_episode()
