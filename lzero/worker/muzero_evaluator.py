@@ -486,9 +486,10 @@ class MuZeroEvaluator(ISerialEvaluator):
                 if len(rewards) == 0:
                     continue
                 safe_name = str(matchup_name).replace(' ', '_')
-                info[f'matchup_{safe_name}_reward_mean'] = float(np.mean(rewards))
-                info[f'matchup_{safe_name}_reward_std'] = float(np.std(rewards))
-                info[f'matchup_{safe_name}_episode_count'] = matchup_counts.get(matchup_name, 0)
+                # Use '/' separator to create separate chart groups in Wandb
+                info[f'eval_matchup/{safe_name}/reward_mean'] = float(np.mean(rewards))
+                info[f'eval_matchup/{safe_name}/reward_std'] = float(np.std(rewards))
+                info[f'eval_matchup/{safe_name}/episode_count'] = matchup_counts.get(matchup_name, 0)
             episode_info = eval_monitor.get_episode_info()
             if episode_info is not None:
                 info.update(episode_info)

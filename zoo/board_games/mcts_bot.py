@@ -398,10 +398,12 @@ class MCTSBot:
         else:
             child_node = mcts.best_action(num_simulation, best_action_type=best_action_type)
         print(root.visit_count)
-        if step%2 == 1:
-            self.plot_simulation_graph(child_node, step)
-        else:
-            self.plot_simulation_graph(root, step)
+        board_size = np.array(root.env.board).size
+        if board_size == 42:
+            if step % 2 == 1:
+                self.plot_simulation_graph(child_node, step)
+            else:
+                self.plot_simulation_graph(root, step)
         # if step == 3:
         #     self.plot_simulation_graph(root, step)
 

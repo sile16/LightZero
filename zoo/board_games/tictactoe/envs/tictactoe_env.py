@@ -64,6 +64,8 @@ class TicTacToeEnv(BaseEnv):
         prob_random_agent=0,
         # (int): The probability of the expert agent.
         prob_expert_agent=0,
+        # (bool): If True, print boards and decisions for heuristic_perfect bot.
+        heuristic_print=False,
         # (bool): If True, the channel will be the last dimension.
         channel_last=False,
         # (bool): If True, the pixel values will be scaled.
@@ -102,8 +104,6 @@ class TicTacToeEnv(BaseEnv):
         self._env = self
         self.agent_vs_human = self._cfg.agent_vs_human
         self.bot_action_type = self._cfg.bot_action_type
-        if 'alpha_beta_pruning' in self.bot_action_type:
-            self.alpha_beta_pruning_player = AlphaBetaPruningBot(self, self._cfg, 'alpha_beta_pruning_player')
         self.alphazero_mcts_ctree = self._cfg.alphazero_mcts_ctree
         self._replay_path = self._cfg.replay_path if hasattr(self._cfg, "replay_path") and self._cfg.replay_path is not None else None
         self._save_replay_count = 0
@@ -116,6 +116,13 @@ class TicTacToeEnv(BaseEnv):
         self._eval_bot_action_type = None
         self._eval_agent_role = 'first'
         self._eval_matchup_name = None
+        needs_alpha_beta = 'alpha_beta_pruning' in self.bot_action_type
+        if self._eval_matchups:
+            needs_alpha_beta = needs_alpha_beta or any(
+                m.get('action_type') == 'alpha_beta_pruning' for m in self._eval_matchups
+            )
+        if needs_alpha_beta:
+            self.alpha_beta_pruning_player = AlphaBetaPruningBot(self, self._cfg, 'alpha_beta_pruning_player')
         # Stochastic MuZero support: TicTacToe is deterministic, so chance is always 0
         self.chance = 0
         self.chance_space_size = 1  # Only one "chance" outcome (no randomness)
@@ -168,7 +175,8 @@ class TicTacToeEnv(BaseEnv):
         if start_player_index is None:
             start_player_index = self._default_start_player_index
         # Eval mode always starts from player 1; agent role decides who moves first.
-        if self.battle_mode == 'eval_mode':
+        # Skip eval matchup selection if init_state is provided (simulator mode for MCTS/alpha-beta).
+        if self.battle_mode == 'eval_mode' and init_state is None:
             start_player_index = 0
             self._select_eval_matchup()
 
@@ -198,8 +206,9 @@ class TicTacToeEnv(BaseEnv):
         action_mask = np.zeros(self.total_num_actions, 'int8')
         action_mask[self.legal_actions] = 1
 
-        if self.battle_mode == 'play_with_bot_mode' or self.battle_mode == 'eval_mode':
+        if self.battle_mode == 'play_with_bot_mode' or (self.battle_mode == 'eval_mode' and init_state is None):
             # In eval_mode, if agent plays second, bot moves first.
+            # Skip if init_state is provided (simulator mode).
             if self.battle_mode == 'eval_mode' and self._eval_agent_role == 'second':
                 bot_action = self.bot_action()
                 self._player_step(bot_action)
@@ -225,7 +234,8 @@ class TicTacToeEnv(BaseEnv):
                 'to_play': -1,
                 'chance': self.chance  # Stochastic MuZero support (always 0 for deterministic game)
             }
-        elif self.battle_mode == 'self_play_mode':
+        else:
+            # self_play_mode, or eval_mode with init_state (simulator mode)
             # In the "self_play_mode", we set to_play=self.current_player in the "obs" dict,
             # which is used to differentiate the alternation of 2 players in the game when calculating Q in the MCTS algorithm.
             obs = {
@@ -462,6 +472,8 @@ class TicTacToeEnv(BaseEnv):
             return self.random_action()
         if action_type == 'v0':
             return self.rule_bot_v0()
+        if action_type == 'heuristic_perfect':
+            return self.rule_bot_heuristic_perfect()
         elif action_type == 'alpha_beta_pruning':
             return self.bot_action_alpha_beta_pruning()
         else:
@@ -539,6 +551,264 @@ class TicTacToeEnv(BaseEnv):
                 # only take the action that will lead a connect3 of current player's pieces
                 return action
 
+        return action
+
+    def _find_winning_moves(self, board, player):
+        moves = []
+        for action in self.legal_actions:
+            row, col = self.action_to_coord(action)
+            if board[row, col] != 0:
+                continue
+            board_copy = copy.deepcopy(board)
+            board_copy[row, col] = player
+            done, winner = _get_done_winner_func_lru(tuple(map(tuple, board_copy)))
+            if done and winner == player:
+                moves.append(action)
+        return moves
+
+    def _find_fork_moves(self, board, player):
+        fork_moves = []
+        for action in self.legal_actions:
+            row, col = self.action_to_coord(action)
+            if board[row, col] != 0:
+                continue
+            board_copy = copy.deepcopy(board)
+            board_copy[row, col] = player
+            winning_moves = self._find_winning_moves(board_copy, player)
+            if len(winning_moves) >= 2:
+                fork_moves.append(action)
+        return fork_moves
+
+    def _symmetry_maps(self):
+        if hasattr(self, "_symmetry_maps_cache"):
+            return self._symmetry_maps_cache
+        index_board = np.arange(9).reshape(3, 3)
+        maps = []
+        for k in range(4):
+            rot = np.rot90(index_board, k)
+            maps.append(rot)
+            maps.append(np.fliplr(rot))
+        transform_maps = []
+        for transformed in maps:
+            flat = transformed.flatten()
+            forward = np.empty(9, dtype=np.int64)
+            for i in range(9):
+                forward[i] = int(np.where(flat == i)[0][0])
+            inverse = np.empty(9, dtype=np.int64)
+            for i in range(9):
+                inverse[forward[i]] = i
+            transform_maps.append(
+                {
+                    "forward": forward,
+                    "inverse": inverse,
+                }
+            )
+        self._symmetry_maps_cache = transform_maps
+        return transform_maps
+
+    def _apply_symmetry(self, board, transform_index):
+        k = transform_index // 2
+        rot = np.rot90(board, k)
+        if transform_index % 2 == 1:
+            return np.fliplr(rot)
+        return rot
+
+    def _normalize_board_for_player(self, board, player):
+        if player == 1:
+            return board
+        board_copy = copy.deepcopy(board)
+        board_copy[board_copy == 1] = 3
+        board_copy[board_copy == 2] = 1
+        board_copy[board_copy == 3] = 2
+        return board_copy
+
+    def _canonicalize_board(self, board):
+        best = None
+        best_index = 0
+        for i in range(8):
+            transformed = self._apply_symmetry(board, i)
+            flat = tuple(transformed.flatten().tolist())
+            if best is None or flat < best:
+                best = flat
+                best_index = i
+        best_board = np.array(best, dtype=np.int32).reshape(3, 3)
+        return best_board, best_index
+
+    def _heuristic_opening_move(self):
+        normalized = self._normalize_board_for_player(self.board, self.current_player)
+        player_count = int(np.sum(normalized == 1))
+        opponent_count = int(np.sum(normalized == 2))
+        if player_count != 1 or opponent_count != 1:
+            return None
+
+        canonical, transform_index = self._canonicalize_board(normalized)
+        flat = canonical.flatten()
+        pos_player = int(np.where(flat == 1)[0][0])
+        pos_opponent = int(np.where(flat == 2)[0][0])
+
+        center = 4
+        corners = [0, 2, 6, 8]
+        edges = [1, 3, 5, 7]
+        opposite_corner = {0: 8, 2: 6, 6: 2, 8: 0}
+        edge_to_corners = {
+            1: [0, 2],
+            3: [0, 6],
+            5: [2, 8],
+            7: [6, 8],
+        }
+        corner_to_edges = {
+            0: [1, 3],
+            2: [1, 5],
+            6: [3, 7],
+            8: [5, 7],
+        }
+
+        action_canonical = None
+        if pos_player == center:
+            if pos_opponent in corners:
+                action_canonical = opposite_corner[pos_opponent]
+            elif pos_opponent in edges:
+                action_canonical = edge_to_corners[pos_opponent][0]
+        elif pos_player in corners:
+            if pos_opponent == center:
+                opp = opposite_corner[pos_player]
+                preferred_edges = corner_to_edges[opp]
+                action_canonical = preferred_edges[0]
+            elif pos_opponent in corners:
+                if pos_opponent == opposite_corner[pos_player]:
+                    row = pos_player // 3
+                    action_canonical = row * 3 + (2 - (pos_player % 3))
+                else:
+                    action_canonical = center
+            elif pos_opponent in edges:
+                adjacent_edges = corner_to_edges[pos_player]
+                if pos_opponent in adjacent_edges:
+                    candidates = edge_to_corners[pos_opponent]
+                    candidates = [c for c in candidates if c != pos_player]
+                    action_canonical = candidates[0] if candidates else None
+                else:
+                    adjacent_corners = edge_to_corners[pos_opponent]
+                    candidates = [c for c in corners if c not in adjacent_corners and c != pos_player]
+                    action_canonical = candidates[0] if candidates else None
+
+        if action_canonical is None:
+            return None
+        transform_maps = self._symmetry_maps()
+        action = int(transform_maps[transform_index]["inverse"][action_canonical])
+        if action in self.legal_actions:
+            return action
+        return None
+
+    def _maybe_print_heuristic(self, action, reason):
+        if not self._cfg.get('heuristic_print', False):
+            return
+        def _render(board):
+            symbol_map = {0: ".", 1: "X", 2: "O"}
+            lines = []
+            for row in board:
+                line = " ".join(symbol_map[int(cell)] for cell in row)
+                lines.append(line)
+            return "\n".join(lines)
+        print("TicTacToe heuristic board:")
+        print(_render(self.board))
+        print(f"player={self.current_player} action={action} reason={reason}")
+
+    def rule_bot_heuristic_perfect(self):
+        """
+        Overview:
+            Deterministic heuristic for perfect TicTacToe play.
+            Strategy order: win, block, fork, block fork, center, opposite corner, empty corner, empty side.
+        """
+        opening_action = self._heuristic_opening_move()
+        if opening_action is not None:
+            self._maybe_print_heuristic(opening_action, "opening_book")
+            return opening_action
+        player = self.current_player
+        opponent = self.next_player
+
+        winning_moves = self._find_winning_moves(self.board, player)
+        if winning_moves:
+            action = winning_moves[0]
+            self._maybe_print_heuristic(action, "win")
+            return action
+
+        blocking_moves = self._find_winning_moves(self.board, opponent)
+        if blocking_moves:
+            action = blocking_moves[0]
+            self._maybe_print_heuristic(action, "block")
+            return action
+
+        fork_moves = self._find_fork_moves(self.board, player)
+        if fork_moves:
+            action = fork_moves[0]
+            self._maybe_print_heuristic(action, "fork")
+            return action
+
+        opponent_forks = self._find_fork_moves(self.board, opponent)
+        if opponent_forks:
+            center = self.coord_to_action(1, 1)
+            corners = [self.coord_to_action(0, 0), self.coord_to_action(0, 2),
+                       self.coord_to_action(2, 0), self.coord_to_action(2, 2)]
+            if (center not in self.legal_actions and self.board[1, 1] == opponent and
+                    any(self.board[r, c] == player for r, c in [(0, 0), (0, 2), (2, 0), (2, 2)]) and
+                    any(self.board[r, c] == opponent for r, c in [(0, 0), (0, 2), (2, 0), (2, 2)])):
+                for corner in corners:
+                    if corner in self.legal_actions:
+                        self._maybe_print_heuristic(corner, "block_fork_corner")
+                        return corner
+            if len(opponent_forks) == 1:
+                action = opponent_forks[0]
+                self._maybe_print_heuristic(action, "block_fork_single")
+                return action
+            # Try to create a threat to force a response.
+            for action in self.legal_actions:
+                row, col = self.action_to_coord(action)
+                if self.board[row, col] != 0:
+                    continue
+                board_copy = copy.deepcopy(self.board)
+                board_copy[row, col] = player
+                if self._find_winning_moves(board_copy, player):
+                    self._maybe_print_heuristic(action, "block_fork_threat")
+                    return action
+            action = opponent_forks[0]
+            self._maybe_print_heuristic(action, "block_fork_fallback")
+            return action
+
+        center = self.coord_to_action(1, 1)
+        if center in self.legal_actions:
+            self._maybe_print_heuristic(center, "center")
+            return center
+
+        corners = [self.coord_to_action(0, 0), self.coord_to_action(0, 2),
+                   self.coord_to_action(2, 0), self.coord_to_action(2, 2)]
+        opposite = {
+            self.coord_to_action(0, 0): self.coord_to_action(2, 2),
+            self.coord_to_action(2, 2): self.coord_to_action(0, 0),
+            self.coord_to_action(0, 2): self.coord_to_action(2, 0),
+            self.coord_to_action(2, 0): self.coord_to_action(0, 2),
+        }
+        for corner in corners:
+            r, c = self.action_to_coord(corner)
+            if self.board[r, c] == opponent:
+                opp_corner = opposite[corner]
+                if opp_corner in self.legal_actions:
+                    self._maybe_print_heuristic(opp_corner, "opposite_corner")
+                    return opp_corner
+
+        for corner in corners:
+            if corner in self.legal_actions:
+                self._maybe_print_heuristic(corner, "empty_corner")
+                return corner
+
+        sides = [self.coord_to_action(0, 1), self.coord_to_action(1, 0),
+                 self.coord_to_action(1, 2), self.coord_to_action(2, 1)]
+        for side in sides:
+            if side in self.legal_actions:
+                self._maybe_print_heuristic(side, "empty_side")
+                return side
+
+        action = self.random_action()
+        self._maybe_print_heuristic(action, "random_fallback")
         return action
 
     @property

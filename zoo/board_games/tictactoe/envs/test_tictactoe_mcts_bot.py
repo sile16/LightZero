@@ -25,25 +25,27 @@ class TestTicTacToeBot:
         env = TicTacToeEnv(EasyDict(cfg))
         env.reset()
         state = env.board
-        player_0 = MCTSBot(TicTacToeEnv, cfg, 'player 1', 1000)  # player_index = 0, player = 1
-        player_1 = MCTSBot(TicTacToeEnv, cfg, 'player 2', 1)  # player_index = 1, player = 2
+        player_0 = MCTSBot(TicTacToeEnv(EasyDict(cfg)), 'player 1', 1000)  # player_index = 0, player = 1
+        player_1 = MCTSBot(TicTacToeEnv(EasyDict(cfg)), 'player 2', 1)  # player_index = 1, player = 2
 
         player_index = 0  # player 1 fist
+        step = 0
         print('#' * 15)
         print(state)
         print('#' * 15)
         print('\n')
         while not env.get_done_reward()[0]:
             if player_index == 0:
-                action = player_0.get_actions(state, player_index=player_index)
+                action, _, _ = player_0.get_actions(state, step=step, player_index=player_index)
                 player_index = 1
             else:
                 print('-' * 40)
-                action = player_1.get_actions(state, player_index=player_index)
+                action, _, _ = player_1.get_actions(state, step=step, player_index=player_index)
                 player_index = 0
                 print('-' * 40)
             env.step(action)
             state = env.board
+            step += 1
             print('#' * 15)
             print(state)
             print('#' * 15)
@@ -56,25 +58,27 @@ class TestTicTacToeBot:
         env = TicTacToeEnv(EasyDict(cfg))
         env.reset()
         state = env.board
-        player_0 = MCTSBot(TicTacToeEnv, cfg, 'player 1', 1)  # player_index = 0, player = 1
-        player_1 = MCTSBot(TicTacToeEnv, cfg, 'player 2', 1000)  # player_index = 1, player = 2
+        player_0 = MCTSBot(TicTacToeEnv(EasyDict(cfg)), 'player 1', 1)  # player_index = 0, player = 1
+        player_1 = MCTSBot(TicTacToeEnv(EasyDict(cfg)), 'player 2', 1000)  # player_index = 1, player = 2
 
         player_index = 0  # player 1 fist
+        step = 0
         print('#' * 15)
         print(state)
         print('#' * 15)
         print('\n')
         while not env.get_done_reward()[0]:
             if player_index == 0:
-                action = player_0.get_actions(state, player_index=player_index)
+                action, _, _ = player_0.get_actions(state, step=step, player_index=player_index)
                 player_index = 1
             else:
                 print('-' * 40)
-                action = player_1.get_actions(state, player_index=player_index)
+                action, _, _ = player_1.get_actions(state, step=step, player_index=player_index)
                 player_index = 0
                 print('-' * 40)
             env.step(action)
             state = env.board
+            step += 1
             print('#' * 15)
             print(state)
             print('#' * 15)
@@ -87,25 +91,27 @@ class TestTicTacToeBot:
         env = TicTacToeEnv(EasyDict(cfg))
         env.reset()
         state = env.board
-        player_0 = MCTSBot(TicTacToeEnv, cfg, 'player 1', 1000)  # player_index = 0, player = 1
-        player_1 = MCTSBot(TicTacToeEnv, cfg, 'player 2', 1000)  # player_index = 1, player = 2
+        player_0 = MCTSBot(TicTacToeEnv(EasyDict(cfg)), 'player 1', 1000)  # player_index = 0, player = 1
+        player_1 = MCTSBot(TicTacToeEnv(EasyDict(cfg)), 'player 2', 1000)  # player_index = 1, player = 2
 
         player_index = 0  # player 1 fist
+        step = 0
         print('#' * 15)
         print(state)
         print('#' * 15)
         print('\n')
         while not env.get_done_reward()[0]:
             if player_index == 0:
-                action = player_0.get_actions(state, player_index=player_index)
+                action, _, _ = player_0.get_actions(state, step=step, player_index=player_index)
                 player_index = 1
             else:
                 print('-' * 40)
-                action = player_1.get_actions(state, player_index=player_index)
+                action, _, _ = player_1.get_actions(state, step=step, player_index=player_index)
                 player_index = 0
                 print('-' * 40)
             env.step(action)
             state = env.board
+            step += 1
             print('#' * 15)
             print(state)
             print('#' * 15)
@@ -114,9 +120,10 @@ class TestTicTacToeBot:
     def test_tictactoe_self_play_mode_half_case_1(self):
         env = TicTacToeEnv(EasyDict(cfg))
         init_state = [[1, 1, 0], [0, 2, 2], [0, 0, 0]]
-        player_0 = MCTSBot(TicTacToeEnv, cfg, 'player 1', 1000)  # player_index = 0, player = 1
-        player_1 = MCTSBot(TicTacToeEnv, cfg, 'player 2', 1000)  # player_index = 1, player = 2
+        player_0 = MCTSBot(TicTacToeEnv(EasyDict(cfg)), 'player 1', 1000)  # player_index = 0, player = 1
+        player_1 = MCTSBot(TicTacToeEnv(EasyDict(cfg)), 'player 2', 1000)  # player_index = 1, player = 2
         player_index = 0  # player 1 fist
+        step = 0
 
         env.reset(player_index, init_state)
         state = env.board
@@ -127,15 +134,16 @@ class TestTicTacToeBot:
         print('\n')
         while not env.get_done_reward()[0]:
             if player_index == 0:
-                action = player_0.get_actions(state, player_index=player_index)
+                action, _, _ = player_0.get_actions(state, step=step, player_index=player_index)
                 player_index = 1
             else:
                 print('-' * 40)
-                action = player_1.get_actions(state, player_index=player_index)
+                action, _, _ = player_1.get_actions(state, step=step, player_index=player_index)
                 player_index = 0
                 print('-' * 40)
             env.step(action)
             state = env.board
+            step += 1
             print('#' * 15)
             print(state)
             print('#' * 15)
@@ -146,9 +154,10 @@ class TestTicTacToeBot:
     def test_tictactoe_self_play_mode_half_case_2(self):
         env = TicTacToeEnv(EasyDict(cfg))
         init_state = [[1, 0, 1], [0, 0, 2], [2, 0, 1]]
-        player_0 = MCTSBot(TicTacToeEnv, cfg, 'player 1', 1000)  # player_index = 0, player = 1
-        player_1 = MCTSBot(TicTacToeEnv, cfg, 'player 2', 1000)  # player_index = 1, player = 2
+        player_0 = MCTSBot(TicTacToeEnv(EasyDict(cfg)), 'player 1', 1000)  # player_index = 0, player = 1
+        player_1 = MCTSBot(TicTacToeEnv(EasyDict(cfg)), 'player 2', 1000)  # player_index = 1, player = 2
         player_index = 1  # player 1 fist
+        step = 0
 
         env.reset(player_index, init_state)
         state = env.board
@@ -159,15 +168,16 @@ class TestTicTacToeBot:
         print('\n')
         while not env.get_done_reward()[0]:
             if player_index == 0:
-                action = player_0.get_actions(state, player_index=player_index)
+                action, _, _ = player_0.get_actions(state, step=step, player_index=player_index)
                 player_index = 1
             else:
                 print('-' * 40)
-                action = player_1.get_actions(state, player_index=player_index)
+                action, _, _ = player_1.get_actions(state, step=step, player_index=player_index)
                 player_index = 0
                 print('-' * 40)
             env.step(action)
             state = env.board
+            step += 1
             print('#' * 15)
             print(state)
             print('#' * 15)

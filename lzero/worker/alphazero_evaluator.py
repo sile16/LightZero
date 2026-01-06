@@ -1,5 +1,5 @@
 from collections import namedtuple
-from typing import Optional, Callable, Tuple
+from typing import Optional, Callable, Tuple, Dict
 
 import numpy as np
 import torch
@@ -202,6 +202,8 @@ class AlphaZeroEvaluator(ISerialEvaluator):
             assert n_episode is not None, "please indicate eval n_episode"
             envstep_count = 0
             eval_monitor = VectorEvalMonitor(self._env.env_num, n_episode)
+            matchup_rewards: Dict[str, list] = {}
+            matchup_counts: Dict[str, int] = {}
             self._env.reset()
             self._policy.reset()
 
@@ -233,6 +235,10 @@ class AlphaZeroEvaluator(ISerialEvaluator):
                             saved_info = {'eval_episode_return': t.info['eval_episode_return']}
                             if 'episode_info' in t.info:
                                 saved_info.update(t.info['episode_info'])
+                                matchup_name = saved_info.get('eval_matchup')
+                                if matchup_name is not None:
+                                    matchup_rewards.setdefault(matchup_name, []).append(reward)
+                                    matchup_counts[matchup_name] = matchup_counts.get(matchup_name, 0) + 1
                             eval_monitor.update_info(env_id, saved_info)
                             eval_monitor.update_reward(env_id, reward)
                             self._logger.info(
@@ -261,6 +267,15 @@ class AlphaZeroEvaluator(ISerialEvaluator):
                 'reward_min': np.min(episode_return),
                 # 'each_reward': episode_return,
             }
+            # Add per-matchup metrics (for multi-bot evaluation)
+            for matchup_name, rewards in matchup_rewards.items():
+                if len(rewards) == 0:
+                    continue
+                safe_name = str(matchup_name).replace(' ', '_')
+                # Use '/' separator to create separate chart groups in Wandb
+                info[f'eval_matchup/{safe_name}/reward_mean'] = float(np.mean(rewards))
+                info[f'eval_matchup/{safe_name}/reward_std'] = float(np.std(rewards))
+                info[f'eval_matchup/{safe_name}/episode_count'] = matchup_counts.get(matchup_name, 0)
             episode_info_from_monitor = eval_monitor.get_episode_info()
             if episode_info_from_monitor is not None:
                 info.update(episode_info_from_monitor)
