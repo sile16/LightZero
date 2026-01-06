@@ -221,6 +221,8 @@ class MuZeroEvaluator(ISerialEvaluator):
             envstep_count = 0
             eval_monitor = VectorEvalMonitor(self._env.env_num, n_episode)
             env_nums = self._env.env_num
+            matchup_rewards: Dict[str, list] = {}
+            matchup_counts: Dict[str, int] = {}
 
             self._env.reset()
             self._policy.reset()
@@ -395,6 +397,10 @@ class MuZeroEvaluator(ISerialEvaluator):
                             saved_info = {'eval_episode_return': episode_timestep.info['eval_episode_return']}
                             if 'episode_info' in episode_timestep.info:
                                 saved_info.update(episode_timestep.info['episode_info'])
+                                matchup_name = saved_info.get('eval_matchup')
+                                if matchup_name is not None:
+                                    matchup_rewards.setdefault(matchup_name, []).append(reward)
+                                    matchup_counts[matchup_name] = matchup_counts.get(matchup_name, 0) + 1
                             eval_monitor.update_info(env_id, saved_info)
                             eval_monitor.update_reward(env_id, reward)
 
@@ -476,6 +482,13 @@ class MuZeroEvaluator(ISerialEvaluator):
                 'reward_min': np.min(episode_return)
                 # 'each_reward': episode_return,
             }
+            for matchup_name, rewards in matchup_rewards.items():
+                if len(rewards) == 0:
+                    continue
+                safe_name = str(matchup_name).replace(' ', '_')
+                info[f'matchup_{safe_name}_reward_mean'] = float(np.mean(rewards))
+                info[f'matchup_{safe_name}_reward_std'] = float(np.std(rewards))
+                info[f'matchup_{safe_name}_episode_count'] = matchup_counts.get(matchup_name, 0)
             episode_info = eval_monitor.get_episode_info()
             if episode_info is not None:
                 info.update(episode_info)

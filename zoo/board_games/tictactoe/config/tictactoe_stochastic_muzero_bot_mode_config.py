@@ -22,10 +22,23 @@ use_ture_chance_label_in_chance_encoder = True
 tictactoe_stochastic_muzero_config = dict(
     exp_name=f'data_stochastic_mz/tictactoe_stochastic_muzero_bot-mode_ns{num_simulations}_upc{update_per_collect}_rer{reanalyze_ratio}_seed0',
     env=dict(
-        battle_mode='play_with_bot_mode',  # self_play_mode has subprocess sync issues
+        battle_mode='self_play_mode',
+        eval_bots=[
+            dict(name='random', action_type='random'),
+            dict(name='heuristic', action_type='v0'),
+            dict(name='perfect', action_type='alpha_beta_pruning'),
+        ],
+        eval_matchups=[
+            dict(bot='random', action_type='random', agent_role='first'),
+            dict(bot='random', action_type='random', agent_role='second'),
+            dict(bot='heuristic', action_type='v0', agent_role='first'),
+            dict(bot='heuristic', action_type='v0', agent_role='second'),
+            dict(bot='perfect', action_type='alpha_beta_pruning', agent_role='first'),
+            dict(bot='perfect', action_type='alpha_beta_pruning', agent_role='second'),
+        ],
         collector_env_num=collector_env_num,
         evaluator_env_num=evaluator_env_num,
-        n_evaluator_episode=evaluator_env_num,  # Match env_num to avoid subprocess reset issues
+        n_evaluator_episode=100,
         manager=dict(shared_memory=False, ),
     ),
     policy=dict(

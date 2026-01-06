@@ -50,6 +50,10 @@ class TicTacToeEnv(BaseEnv):
         battle_mode_in_simulation_env='self_play_mode',
         # (str): The type of action the bot should take. Choices are 'v0' or 'alpha_beta_pruning'.
         bot_action_type='v0',
+        # (list): Optional eval bot definitions for eval_mode.
+        eval_bots=None,
+        # (list): Optional eval matchups for eval_mode.
+        eval_matchups=None,
         # (int): The index of the player who starts. 0 = model first, 1 = bot first (in play_with_bot_mode).
         start_player_index=0,
         # (str): The folder path where replay video saved, if None, will not save replay video.
@@ -105,6 +109,13 @@ class TicTacToeEnv(BaseEnv):
         self._save_replay_count = 0
         # Default start_player_index from config (0 = model first, 1 = bot first)
         self._default_start_player_index = self._cfg.get('start_player_index', 0)
+        # Eval bot scheduling (eval_mode only)
+        self._eval_bots = self._cfg.get('eval_bots', None) or []
+        self._eval_matchups = self._cfg.get('eval_matchups', None) or []
+        self._eval_matchup_index = 0
+        self._eval_bot_action_type = None
+        self._eval_agent_role = 'first'
+        self._eval_matchup_name = None
         # Stochastic MuZero support: TicTacToe is deterministic, so chance is always 0
         self.chance = 0
         self.chance_space_size = 1  # Only one "chance" outcome (no randomness)
@@ -156,6 +167,10 @@ class TicTacToeEnv(BaseEnv):
         # Use default from config if not specified
         if start_player_index is None:
             start_player_index = self._default_start_player_index
+        # Eval mode always starts from player 1; agent role decides who moves first.
+        if self.battle_mode == 'eval_mode':
+            start_player_index = 0
+            self._select_eval_matchup()
 
         if self.alphazero_mcts_ctree and init_state is not None:
             # Convert byte string to np.ndarray
@@ -184,8 +199,15 @@ class TicTacToeEnv(BaseEnv):
         action_mask[self.legal_actions] = 1
 
         if self.battle_mode == 'play_with_bot_mode' or self.battle_mode == 'eval_mode':
-            # If start_player_index=1 (bot goes first), have the bot make the first move
-            if self.start_player_index == 1:
+            # In eval_mode, if agent plays second, bot moves first.
+            if self.battle_mode == 'eval_mode' and self._eval_agent_role == 'second':
+                bot_action = self.bot_action()
+                self._player_step(bot_action)
+                # Update action mask after bot's move
+                action_mask = np.zeros(self.total_num_actions, 'int8')
+                action_mask[self.legal_actions] = 1
+            # In play_with_bot_mode, if start_player_index=1 (bot goes first), have the bot make the first move
+            if self.battle_mode == 'play_with_bot_mode' and self.start_player_index == 1:
                 bot_action = self.bot_action()
                 self._player_step(bot_action)
                 # Update action mask after bot's move
@@ -284,6 +306,9 @@ class TicTacToeEnv(BaseEnv):
                 # NOTE: in eval_mode, we must set to_play as -1, because we don't consider the alternation between players.
                 # And the to_play is used in MCTS.
                 timestep_player1.obs['to_play'] = -1
+                timestep_player1.info['eval_episode_return'] = self._eval_agent_return()
+                timestep_player1 = timestep_player1._replace(reward=timestep_player1.info['eval_episode_return'])
+                self._set_eval_episode_info(timestep_player1)
 
                 if self._replay_path is not None:
                     if not os.path.exists(self._replay_path):
@@ -310,9 +335,11 @@ class TicTacToeEnv(BaseEnv):
             timestep_player2 = self._player_step(bot_action)
             if self._replay_path is not None:
                 self._frames.append(self._env.render(mode='rgb_array'))
-            # the eval_episode_return is calculated from Player 1's perspective
-            timestep_player2.info['eval_episode_return'] = -timestep_player2.reward
-            timestep_player2 = timestep_player2._replace(reward=-timestep_player2.reward)
+            # The eval_episode_return is calculated from agent's perspective.
+            if timestep_player2.done:
+                timestep_player2.info['eval_episode_return'] = self._eval_agent_return()
+                timestep_player2 = timestep_player2._replace(reward=timestep_player2.info['eval_episode_return'])
+            self._set_eval_episode_info(timestep_player2)
 
             timestep = timestep_player2
             # NOTE: in eval_mode, we must set to_play as -1, because we don't consider the alternation between players.
@@ -430,9 +457,12 @@ class TicTacToeEnv(BaseEnv):
         return np.random.choice(action_list)
 
     def bot_action(self):
-        if self.bot_action_type == 'v0':
+        action_type = self._get_bot_action_type()
+        if action_type == 'random':
+            return self.random_action()
+        if action_type == 'v0':
             return self.rule_bot_v0()
-        elif self.bot_action_type == 'alpha_beta_pruning':
+        elif action_type == 'alpha_beta_pruning':
             return self.bot_action_alpha_beta_pruning()
         else:
             raise NotImplementedError
@@ -534,6 +564,52 @@ class TicTacToeEnv(BaseEnv):
         Overview: to compute expert action easily.
         """
         return -1 if self.current_player == 1 else 1
+
+    def set_eval_bot(self, bot_action_type: str) -> None:
+        """Set bot type for eval_mode only."""
+        self._eval_bot_action_type = bot_action_type
+
+    def set_eval_agent_role(self, role: str) -> None:
+        """Set agent role for eval_mode only: 'first' or 'second'."""
+        if role not in ['first', 'second']:
+            raise ValueError(f"Invalid eval agent role: {role}")
+        self._eval_agent_role = role
+
+    def _get_bot_action_type(self) -> str:
+        if self.battle_mode == 'eval_mode' and self._eval_bot_action_type is not None:
+            return self._eval_bot_action_type
+        return self.bot_action_type
+
+    def _select_eval_matchup(self) -> None:
+        if not self._eval_matchups:
+            self._eval_bot_action_type = self.bot_action_type
+            self._eval_agent_role = 'first'
+            self._eval_matchup_name = f"{self._eval_bot_action_type}_first"
+            return
+        matchup = self._eval_matchups[self._eval_matchup_index % len(self._eval_matchups)]
+        self._eval_matchup_index += 1
+        bot_name = matchup.get('bot', 'bot')
+        bot_action_type = matchup.get('action_type', self.bot_action_type)
+        agent_role = matchup.get('agent_role', 'first')
+        self.set_eval_bot(bot_action_type)
+        self.set_eval_agent_role(agent_role)
+        self._eval_matchup_name = f"{bot_name}_{agent_role}"
+
+    def _eval_agent_return(self) -> float:
+        done, winner = self.get_done_winner()
+        if not done or winner == -1:
+            return 0.0
+        agent_player = 1 if self._eval_agent_role == 'first' else 2
+        return 1.0 if winner == agent_player else -1.0
+
+    def _set_eval_episode_info(self, timestep: BaseEnvTimestep) -> None:
+        if self.battle_mode != 'eval_mode' or self._eval_matchup_name is None:
+            return
+        episode_info = timestep.info.get('episode_info', {})
+        episode_info['eval_matchup'] = self._eval_matchup_name
+        episode_info['eval_bot'] = self._get_bot_action_type()
+        episode_info['eval_agent_role'] = self._eval_agent_role
+        timestep.info['episode_info'] = episode_info
 
     def human_to_action(self):
         """
