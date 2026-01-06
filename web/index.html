@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>LightZero Arena</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="bg-orb orb-1"></div>
+    <div class="bg-orb orb-2"></div>
+    <main class="shell">
+      <header class="hero">
+        <div>
+          <div class="eyebrow">LightZero Arena</div>
+          <h1>Play vs Policies, Bots, or Each Other</h1>
+          <p>Server-side inference, browser-side boards. Single session, fast iteration.</p>
+        </div>
+        <div class="status" id="status">No active session</div>
+      </header>
+
+      <section class="grid">
+        <div class="panel">
+          <h2>Lobby</h2>
+          <div class="field">
+            <label>Game</label>
+            <select id="gameSelect"></select>
+          </div>
+          <div class="field">
+            <label>Player 1 (X)</label>
+            <div class="row">
+              <select id="p1Type">
+                <option value="human">Human</option>
+                <option value="bot">Bot</option>
+                <option value="model">Model</option>
+              </select>
+              <select id="p1Bot"></select>
+              <select id="p1Algo"></select>
+              <select id="p1Checkpoint"></select>
+              <input id="p1Sims" type="number" min="1" placeholder="MCTS sims" />
+            </div>
+          </div>
+          <div class="field">
+            <label>Player 2 (O)</label>
+            <div class="row">
+              <select id="p2Type">
+                <option value="human">Human</option>
+                <option value="bot">Bot</option>
+                <option value="model">Model</option>
+              </select>
+              <select id="p2Bot"></select>
+              <select id="p2Algo"></select>
+              <select id="p2Checkpoint"></select>
+              <input id="p2Sims" type="number" min="1" placeholder="MCTS sims" />
+            </div>
+          </div>
+          <div class="field">
+            <label class="toggle">
+              <input type="checkbox" id="autoPlay" checked />
+              <span>Auto-play model/bot turns</span>
+            </label>
+          </div>
+          <div class="actions">
+            <button id="startBtn">Start Session</button>
+            <button class="ghost" id="autoBtn">Advance AI</button>
+          </div>
+          <div class="note" id="checkpointNote"></div>
+        </div>
+
+        <div class="panel">
+          <h2>Board</h2>
+          <div class="board" id="board"></div>
+          <div class="actions-panel" id="actionPanel"></div>
+          <div class="meta">
+            <div id="turnInfo">Turn: --</div>
+            <div id="resultInfo">Result: --</div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

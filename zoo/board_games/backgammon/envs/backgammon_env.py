@@ -106,12 +106,32 @@ class BackgammonEnv(BaseEnv):
         if start_player_index is None:
             start_player_index = self._default_start_player_index
 
-        self.game.reset()
-
-        # Start game with player 0, roll dice (doubles allowed), ready for movement
-        self.game.force_start(start_player=start_player_index)
-        self._current_player = self.game.get_player_turn()
-        self._update_turn_dice_from_remaining()
+        if init_state is not None and isinstance(init_state, dict):
+            board = np.array(init_state.get('board'), dtype=np.int8)
+            bar = np.array(init_state.get('bar', [0, 0]), dtype=np.int8)
+            beared_off = np.array(init_state.get('off', [0, 0]), dtype=np.int8)
+            self.game.debug_reset_board(board, bar, beared_off)
+            turn = int(init_state.get('turn', start_player_index))
+            self.game.set_turn(turn)
+            self.game.set_game_started(True)
+            nature_turn = bool(init_state.get('nature_turn', False))
+            self.game.set_nature_turn(nature_turn)
+            dice = list(init_state.get('dice', []))
+            if dice:
+                self.game.set_dice(dice)
+            if not nature_turn:
+                self.game.generate_movement_moves()
+            self._current_player = self.game.get_player_turn()
+            if dice:
+                self._set_turn_dice_from_values(dice)
+            else:
+                self._update_turn_dice_from_remaining()
+        else:
+            self.game.reset()
+            # Start game with player 0, roll dice (doubles allowed), ready for movement
+            self.game.force_start(start_player=start_player_index)
+            self._current_player = self.game.get_player_turn()
+            self._update_turn_dice_from_remaining()
 
         # In bot mode, if no legal actions (auto-passed), advance until agent can play
         if self.battle_mode == 'play_with_bot_mode':
