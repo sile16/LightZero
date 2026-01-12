@@ -13,6 +13,8 @@ SUPPORTED_POLICY_CONFIGS = {
 
 
 def _format_point(idx: int) -> str:
+    if idx == -1:
+        return "off"
     if idx == 24:
         return "bar"
     return str(idx + 1)
@@ -130,7 +132,9 @@ class BackgammonSession:
     def state(self) -> Dict:
         obs = self.env.observe()
         legal_actions = [int(i) for i, val in enumerate(obs["action_mask"]) if val == 1]
-        my_arr, opp_arr, my_bar, opp_bar, my_off, opp_off = self.env._get_relative_arrays()
+        raw_board = self.env.game.get_board()
+        raw_bar = self.env.game.get_bar()
+        raw_off = self.env.game.get_beared_off()
         return {
             "game": "backgammon",
             "current_player": int(self.env._current_player + 1),
@@ -145,12 +149,12 @@ class BackgammonSession:
                 "slots": list(self.env._get_dice_slots()),
             },
             "board": {
-                "my_points": my_arr.tolist(),
-                "opp_points": opp_arr.tolist(),
-                "my_bar": int(my_bar),
-                "opp_bar": int(opp_bar),
-                "my_off": int(my_off),
-                "opp_off": int(opp_off),
+                "p1_points": raw_board[0].tolist(),
+                "p2_points": raw_board[1].tolist(),
+                "p1_bar": int(raw_bar[0]),
+                "p2_bar": int(raw_bar[1]),
+                "p1_off": int(raw_off[0]),
+                "p2_off": int(raw_off[1]),
             },
             "players": {
                 1: self.players[1].__dict__,

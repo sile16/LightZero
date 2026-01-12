@@ -36,6 +36,19 @@ class PolicyAgent:
         cfg.policy.cuda = False
         cfg.policy.device = "cpu"
         cfg.policy.model_path = None
+        if create_cfg.policy.type in {"alphazero", "gumbel_alphazero", "sampled_alphazero"}:
+            cfg.policy.mcts_ctree = False
+            if hasattr(cfg, "env"):
+                cfg.env.alphazero_mcts_ctree = False
+            model_cfg = cfg.policy.model
+            if hasattr(model_cfg, "downsample") and isinstance(model_cfg.downsample, dict):
+                model_cfg.downsample = bool(model_cfg.downsample.get("is_downsample", False))
+            if hasattr(model_cfg, "fc_value_layers") and not hasattr(model_cfg, "value_head_hidden_channels"):
+                model_cfg.value_head_hidden_channels = list(model_cfg.fc_value_layers)
+            if hasattr(model_cfg, "fc_policy_layers") and not hasattr(model_cfg, "policy_head_hidden_channels"):
+                model_cfg.policy_head_hidden_channels = list(model_cfg.fc_policy_layers)
+            if hasattr(model_cfg, "image_channel"):
+                del model_cfg.image_channel
         if hasattr(cfg, "env"):
             cfg.env.battle_mode = "self_play_mode"
         if self._num_simulations is not None:
@@ -44,7 +57,9 @@ class PolicyAgent:
             if hasattr(cfg.policy, "mcts") and isinstance(cfg.policy.mcts, dict):
                 cfg.policy.mcts["num_simulations"] = int(self._num_simulations)
         compiled_cfg = compile_config(cfg, seed=0, env=None, auto=True, create_cfg=create_cfg, save_cfg=False)
-        self._policy = create_policy(compiled_cfg.policy, model=None, enable_field=["eval"])
+        compiled_cfg.policy.create_cfg = create_cfg
+        compiled_cfg.policy.full_cfg = compiled_cfg
+        self._policy = create_policy(compiled_cfg.policy, model=None, enable_field=["eval", "learn"])
         if self._checkpoint_path:
             state_dict = torch.load(self._checkpoint_path, map_location=compiled_cfg.policy.device)
             self._policy.learn_mode.load_state_dict(state_dict)

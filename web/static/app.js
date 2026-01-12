@@ -229,17 +229,17 @@ function renderBoard() {
     header.innerHTML = `
       <div><strong>Dice</strong>: ${dice.remaining ? dice.remaining.join(", ") : "-"}</div>
       <div><strong>Slots</strong>: ${dice.slots ? dice.slots.join(", ") : "-"}</div>
-      <div><strong>My bar</strong>: ${state.board.my_bar}</div>
-      <div><strong>Opp bar</strong>: ${state.board.opp_bar}</div>
-      <div><strong>My off</strong>: ${state.board.my_off}</div>
-      <div><strong>Opp off</strong>: ${state.board.opp_off}</div>
+      <div><strong>Player 1 bar</strong>: ${state.board.p1_bar}</div>
+      <div><strong>Player 2 bar</strong>: ${state.board.p2_bar}</div>
+      <div><strong>Player 1 off</strong>: ${state.board.p1_off}</div>
+      <div><strong>Player 2 off</strong>: ${state.board.p2_off}</div>
     `;
     boardEl.appendChild(header);
 
     const bg = document.createElement("div");
     bg.className = "bg-board";
-    const myPoints = state.board.my_points || [];
-    const oppPoints = state.board.opp_points || [];
+    const myPoints = state.board.p1_points || [];
+    const oppPoints = state.board.p2_points || [];
     const topRow = document.createElement("div");
     topRow.className = "bg-row";
     const bottomRow = document.createElement("div");
